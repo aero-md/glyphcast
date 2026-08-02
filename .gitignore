@@ -20,6 +20,10 @@ dist-ssr
 .env.*
 !.env.example
 
+# Script de déploiement personnel : il porte l'hôte SSH et l'IP du LAN réels.
+# Le dépôt est public, ils n'ont rien à y faire.
+deploy.ps1
+
 # Sorties de l'app, si on les enregistre dans le dossier du projet
 glyphcast-*.png
 glyphcast-*.kt

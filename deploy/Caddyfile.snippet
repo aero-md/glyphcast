@@ -1,0 +1,32 @@
+# Bloc à insérer DANS le `:80 { ... }` existant du /etc/caddy/Caddyfile,
+# avant le `respond 404` final.
+#
+# Caddy écoute en HTTP plain sur :80, joignable seulement en loopback : le TLS
+# public est terminé par Cloudflare, cloudflared pousse en clair vers 127.0.0.1.
+# Donc pas de bloc `glyph.suns.red { }` nommé, qui déclencherait un ACME inutile.
+
+@glyph host glyph.suns.red
+handle @glyph {
+    root * /srv/glyph
+    encode gzip zstd
+
+    try_files {path} /index.html
+    file_server
+
+    # Vite hache les noms dans /assets/ — ce n'est PAS /_app/immutable/*, qui
+    # est la convention SvelteKit des autres sites du tunnel. Recopier leur
+    # bloc tel quel ne matcherait rien et tuerait le cache.
+    @immutable path /assets/*
+    header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+    # La photo du dos et le favicon sont à la racine et NON hachés : un cache
+    # immutable les figerait pour un an.
+    @static path *.webp *.svg *.ico
+    header @static Cache-Control "public, max-age=3600"
+
+    # L'index porte les références vers les assets hachés. S'il est servi
+    # depuis un cache heuristique, le navigateur réclame des fichiers qui
+    # n'existent plus après un déploiement.
+    @html path / /index.html
+    header @html Cache-Control "no-cache"
+}
