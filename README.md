@@ -1,5 +1,7 @@
 # glyphcast
 
+[Preview at https://glyph.suns.red](https://glyph.suns.red)
+
 Convertit une image en rendu **Glyph Matrix** pour Nothing Phone (3), avec
 préview posée sur le dos de l'appareil et un rack de réglages pour fine-tuner
 le passage image → LEDs.
