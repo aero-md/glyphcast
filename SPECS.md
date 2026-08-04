@@ -4,16 +4,18 @@ Ce document décrit **ce que fait l'application**, dans l'ordre où elle le fait
 avec les formules et les bornes exactes. Il ne traite pas de la direction
 artistique.
 
-Référence d'implémentation : `src/lib/matrix.ts`, `src/lib/pipeline.ts`,
-`src/lib/render.ts`, `src/lib/export.ts`.
+Référence d'implémentation : `src/lib/matrix.ts`, `src/lib/devices.ts`,
+`src/lib/pipeline.ts`, `src/lib/render.ts`, `src/lib/export.ts`.
 
 ---
 
 ## 1. Objet
 
 Transformer une image arbitraire en une trame de luminosités pilotable par la
-**Glyph Matrix** d'un Nothing Phone (3), avec une préview fidèle et de quoi
-régler finement le passage image → LEDs.
+**Glyph Matrix** d'un Nothing Phone, avec une préview fidèle et de quoi régler
+finement le passage image → LEDs. Deux appareils sont pris en charge — Phone (3)
+et Phone (4a) Pro — et la bascule de l'un à l'autre ne perd rien : ni l'image,
+ni un seul réglage.
 
 Tout le traitement est exécuté dans le navigateur. Aucune image, aucun réglage,
 aucune trame ne quitte la machine : il n'y a pas une seule requête réseau après
@@ -33,25 +35,66 @@ d'héberger la fonte avec le reste.
 | Envoi direct à l'appareil | pas d'API navigateur pour piloter la Glyph Matrix ; la passerelle est l'export Kotlin |
 | Couleur | la matrice est monochrome, la question ne se pose pas |
 | Édition d'image (masques, calques, retouche locale) | l'entrée est une image déjà finie |
-| Autres appareils Nothing | la géométrie est celle du Phone (3) |
+| Glyph Interface à bandes — Phone (1), (2), (2a), (3a) | ce ne sont pas des matrices ; rien de ce document ne s'y applique |
 
 ---
 
 ## 2. Cible matérielle
 
-| Constante | Valeur | Source |
-|---|---:|---|
-| `SIZE` | 25 | grille 25 × 25 |
-| `CELLS` | 625 | `SIZE²`, row-major |
-| Centre | (12, 12) | `CX`, `CY` |
-| `RADIUS` | 12,5 | masque circulaire, `dist < RADIUS` |
-| `LED_COUNT` | **489** | calculé, jamais écrit en dur |
-| Profondeur | 0-255 par LED | consigne du Glyph Matrix SDK |
-| Canaux | 1 (luminosité) | pas de couleur |
+Les deux matrices suivent la **même construction** : une grille carrée de N × N
+cellules en row-major, masquée par un disque centré de rayon N/2. Les deux
+comptes publiés de LEDs tombent juste avec cette seule formule, ce qui autorise
+un pipeline unique.
 
-Les 136 cellules hors disque existent dans le tableau — le SDK attend 625
-entrées — mais valent **toujours 0** et sont exclues de tous les calculs
-d'agrégat (comptage, moyenne, auto-gates, diffusion d'erreur).
+| Constante | Phone (3) | Phone (4a) Pro | Source |
+|---|---:|---:|---|
+| `size` | 25 | 13 | côté de la grille |
+| `cells` | 625 | 169 | `size²`, row-major |
+| Centre | (12, 12) | (6, 6) | `((size − 1)/2)` sur les deux axes |
+| `radius` | 12,5 | 6,5 | masque circulaire, `dist < radius` |
+| `ledCount` | **489** | **137** | calculé, jamais écrit en dur |
+| `ss` | 8 | 15 | échantillons par LED et par axe |
+| `sample` | 200 | 195 | côté du canvas d'échantillonnage |
+| Profondeur | 0-255 par LED | idem | consigne du Glyph Matrix SDK |
+| Canaux | 1 (luminosité) | idem | pas de couleur |
+
+Les cellules hors disque — 136 sur un (3), 32 sur un (4a) Pro — existent dans le
+tableau, le SDK attend `size²` entrées, mais valent **toujours 0** et sont
+exclues de tous les calculs d'agrégat (comptage, moyenne, auto-gates, diffusion
+d'erreur).
+
+`buildGeometry(size)` produit tout ça. Ajouter un appareil, c'est ajouter une
+entrée à `DEVICES` dans `src/lib/devices.ts` : rien d'autre dans l'application
+ne connaît de taille de grille.
+
+### 2.1 Calage de la préview
+
+Un profil porte aussi de quoi dessiner le dos de l'appareil. Convention : **x et
+diamètres en fraction de la largeur du cadre, y en fraction de sa hauteur**.
+
+| Repère | Phone (3) | Phone (4a) Pro |
+|---|---:|---:|
+| Cadre (l/h) | 704 / 913 | 704 / 620 |
+| Fond | photo | schéma tracé |
+| Disque — diamètre | 26,04 % | 40,9 % |
+| Disque — centre | 79,53 % / 15,36 % | 34 % / 30 % |
+| Glyph Button — centre | 84,53 % / 74,82 % | 12 % / 78 % |
+
+Ce qui est **mesuré** sur le (4a) Pro : la grille 13 × 13, les 137 LEDs, et le
+diamètre du disque — 57 % de plus que celui du (3) à largeur d'appareil égale,
+soit 0,2604 × 1,57. C'est la seule cote publiée, et c'est celle qui compte :
+elle fixe l'échelle réelle des LEDs, donc tout ce que le mode « téléphone » a à
+dire.
+
+Ce qui est **schématique** : la découpe du plateau caméra, les trois objectifs
+et la position du bouton. Faute de photo, le fond est un plan au filet plutôt
+qu'un rendu approximatif qui se ferait passer pour l'objet. Le remplacer par une
+photo un jour ne demande que de passer le `backdrop` du profil en `kind:
+"photo"`.
+
+La hauteur de bande gardée en colonne unique se **dérive** du bas du disque
+(`previewBand`) au lieu d'être posée en dur : à disque deux fois plus large, une
+constante partagée aurait décapité la matrice du (4a) Pro.
 
 ---
 
@@ -59,48 +102,66 @@ d'agrégat (comptage, moyenne, auto-gates, diffusion d'erreur).
 
 ### `Params` — l'état de réglage complet
 
-Sérialisable, comparable, sans référence à l'image. Deux `Params` identiques
-sur la même image donnent la même trame, toujours.
+Sérialisable, comparable, sans référence à l'image **ni à l'appareil**. Deux
+`Params` identiques sur la même image et le même appareil donnent la même trame,
+toujours.
+
+Aucun réglage n'est exprimé en LEDs : ce sont des grandeurs photographiques
+(stops, gates, gamma, paliers). C'est ce qui rend la bascule d'appareil non
+destructive — il n'y a rien à convertir, seule la grille change sous l'image.
+Seule la netteté a une portée qui dépend de la grille : son noyau reste 3 × 3
+**en LEDs**, donc trois fois plus large en surface sur un (4a) Pro.
 
 ### `Frame` — le résultat
 
 | Champ | Type | Contenu |
 |---|---|---|
-| `values` | `Float32Array(625)` | luminosités 0..1, row-major, 0 hors disque |
-| `lit` | `number` | nombre de LEDs > 0 parmi les 489 |
+| `device` | `Device` | le profil qui a produit la trame |
+| `values` | `Float32Array(device.cells)` | luminosités 0..1, row-major, 0 hors disque |
+| `lit` | `number` | nombre de LEDs > 0 parmi les `device.ledCount` |
 | `mean` | `number` | luminosité moyenne **des LEDs allumées** (0 si aucune) |
 
-`toBytes(frame)` convertit en `Uint8Array(625)` de consignes 0-255 par
+La trame **porte** son appareil au lieu qu'il soit passé à part au rendu et aux
+exports : une trame et sa géométrie ne peuvent donc pas se désaccorder, même en
+pleine bascule.
+
+`toBytes(frame)` convertit en `Uint8Array(device.cells)` de consignes 0-255 par
 `Math.round(v × 255)`.
 
 ---
 
 ## 4. Chaîne de conversion
 
-Une passe pure, sans état caché. `convert(image, w, h, params) → Frame`.
+Une passe pure, sans état caché. `convert(device, image, w, h, params) → Frame`.
 
 ```
 1  cadrage        zoom / décalage / rotation, cover sur fond noir
-2  échantillon    canvas 200 × 200, soit 8 × 8 échantillons par LED
+2  échantillon    canvas sample², soit ss × ss échantillons par LED
 3  luma           poids R/G/B normalisés, en lumière linéaire
-4  downsample     moyenne de zone → 25 × 25, puis ré-encodage sRGB
+4  downsample     moyenne de zone → size × size, puis ré-encodage sRGB
 5  netteté        unsharp 3 × 3
 6  tonalité       exposition → gates → contraste → gamma → inversion
 7  quantification N paliers, avec ou sans dithering
 8  finition       plafond de luminosité, masque disque, agrégats
 ```
 
+Le supersampling **suit** la grille (`ss ≈ 200 / size`) au lieu d'être figé à 8 :
+à facteur constant, la matrice la plus grossière n'échantillonnerait qu'un quart
+de la surface d'image et l'aliasing reviendrait sur l'appareil qui en a le plus
+besoin.
+
 ### 4.1 Cadrage
 
-La source est dessinée dans un canvas `SAMPLE × SAMPLE` (200 × 200) **rempli
-de noir au préalable** : les zones transparentes d'une image à canal alpha
-s'éteignent, ce qui est le comportement attendu d'un rendu LED.
+La source est dessinée dans un canvas `sample × sample` (200 × 200 sur un (3),
+195 × 195 sur un (4a) Pro) **rempli de noir au préalable** : les zones
+transparentes d'une image à canal alpha s'éteignent, ce qui est le comportement
+attendu d'un rendu LED.
 
 ```
-cover = max(SAMPLE / srcW, SAMPLE / srcH)
+cover = max(sample / srcW, sample / srcH)
 s     = cover × max(0,05, zoom)
-tx    = SAMPLE/2 + offsetX × SAMPLE/2
-ty    = SAMPLE/2 + offsetY × SAMPLE/2
+tx    = sample/2 + offsetX × sample/2
+ty    = sample/2 + offsetY × sample/2
 ```
 
 Ordre des transformations : translation, puis rotation, puis échelle, l'image
@@ -113,7 +174,9 @@ huit suivants travaillent sur une grille fixe.
 
 ### 4.2 Échantillonnage et luminance
 
-Chaque LED intègre **64 échantillons** (8 × 8). Pour chacun :
+Chaque LED intègre `ss²` échantillons — **64** (8 × 8) sur un Phone (3), **225**
+(15 × 15) sur un Phone (4a) Pro, dont les LEDs couvrent bien plus de surface.
+Pour chacun :
 
 ```
 lin(c)  = c ≤ 0,04045 ? c/12,92 : ((c + 0,055)/1,055)^2,4     (table de 256)
@@ -131,7 +194,7 @@ surexposer toute l'image.
 
 ### 4.3 Downsample
 
-Moyenne arithmétique des 64 échantillons, **en lumière linéaire**, puis
+Moyenne arithmétique des `ss²` échantillons, **en lumière linéaire**, puis
 ré-encodage sRGB :
 
 ```
@@ -149,7 +212,7 @@ Deux décisions qui ne sont pas cosmétiques :
 
 ### 4.4 Netteté
 
-Masque flou sur la grille 25 × 25, noyau 3 × 3 pondéré (centre 4, orthogonaux
+Masque flou sur la grille de LEDs, noyau 3 × 3 pondéré (centre 4, orthogonaux
 2, diagonales 1, normalisé), bords tronqués :
 
 ```
@@ -221,7 +284,26 @@ paliers, il les tasse.
 
 ## 5. Fonctions de l'interface
 
-### 5.1 Chargement d'une image
+### 5.1 Choix de l'appareil
+
+Un sélecteur exclusif, `(3)` / `(4a) Pro`, posé **avant** les deux sélecteurs de
+préview : c'est le seul des trois qui change ce qui sort de l'outil, les autres
+ne changent que ce qu'on en voit.
+
+La bascule est non destructive et immédiate. Ce qui **ne bouge pas** : l'image
+chargée, le cadrage, le mixeur, la tonalité, la sortie LED, l'échelle de préview,
+le style de LED, le thème. Ce qui **suit** : la grille et le masque, le compteur
+de LEDs, le dos affiché, l'échelle en px/LED, l'en-tête, le pied de page, la
+longueur de l'IntArray et le nom des fichiers exportés.
+
+C'est ce qui permet de régler une image une fois et de lire, en un clic, ce que
+chacune des deux matrices en garde. Un réglage réencodé à la bascule aurait fait
+de la comparaison une approximation.
+
+L'appareil retenu est confirmé par la ligne de notice, avec sa grille et son
+nombre de LEDs — un compteur qui change de plafond sans le dire se lirait mal.
+
+### 5.2 Chargement d'une image
 
 Trois voies, toutes équivalentes :
 
@@ -262,7 +344,7 @@ qui attend l'image.
 Aucun contenu de démonstration n'est affiché : la page ne montre jamais un
 résultat que l'utilisateur n'a pas produit.
 
-### 5.2 Réglages
+### 5.3 Réglages
 
 | Réglage | Plage | Défaut | Effet |
 |---|---|---:|---|
@@ -316,7 +398,7 @@ qu'on veut neuf fois sur dix : on annule *un* réglage, pas tout le travail.
 `dither = none` — le reste des réglages inchangé — puis :
 
 ```
-lo, hi = min et max sur les 489 cellules du disque uniquement
+lo, hi = min et max sur les cellules du disque uniquement (489 ou 137)
 si hi − lo < 0,02 → abandon, la plage est trop plate
 pointNoir  = max(0, lo − 0,01)
 pointBlanc = min(1, hi + 0,01)
@@ -325,7 +407,7 @@ pointBlanc = min(1, hi + 0,01)
 Le balayage doit ignorer les cellules hors disque : elles valent toujours 0 et
 cloueraient le point noir à 0 quelle que soit l'image.
 
-### 5.3 Comparaison avant / après
+### 5.4 Comparaison avant / après
 
 Maintenir le **Glyph Button** (mode téléphone) ou le bouton **Maintenir**
 (mode grand) affiche le rendu de référence : mêmes réglages de **cadrage**,
@@ -346,7 +428,7 @@ identique au rendu courant au dither près, et maintenir ne montre donc presque
 rien. C'est correct, pas une panne : la comparaison n'a de contenu qu'une fois
 qu'il y a quelque chose à comparer.
 
-### 5.4 Préview
+### 5.5 Préview
 
 Deux axes indépendants.
 
@@ -354,12 +436,13 @@ Deux axes indépendants.
 
 | Mode | Grille | Rendu |
 |---|---|---|
-| Téléphone | `diamètre affiché / 25` px CSS par LED | matrice calée sur la photo du dos |
-| Grand | `max(6, ⌊côté / 25⌋)` px par LED | disque seul |
+| Téléphone | `diamètre affiché / size` px CSS par LED | matrice calée sur le dos de l'appareil |
+| Grand | `max(6, ⌊côté / size⌋)` px par LED | disque seul |
 
-Les deux sont larges de `min(576, largeur de colonne)`. À 576 px le disque du
-téléphone mesure 150 px, soit **6 px CSS par LED** : l'échelle réelle de
-l'appareil.
+Les deux sont larges de `min(576, largeur de colonne)`. À 576 px, le disque du
+Phone (3) mesure 150 px soit **6 px CSS par LED**, celui du Phone (4a) Pro
+236 px soit **18 px** : dans les deux cas l'échelle réelle de l'appareil, et
+c'est bien le rapport entre les deux qu'il s'agit de montrer.
 
 **Le téléphone n'est jamais réduit pour tenir en hauteur** — le rétrécir
 viderait le mode de son sens. Quand la place manque il est **rogné par le
@@ -375,8 +458,11 @@ suit alors le diamètre réellement affiché : une valeur figée donnerait une
 trame irrégulière.
 
 Un fondu de 56 px (28 px en colonne unique) marque le bord du rognage, et
-seulement quand il y a rognage — la photo se termine déjà par un dégradé, la
-couper net trancherait dedans.
+seulement quand il y a rognage.
+
+La photo du (3) se termine en outre par son propre dégradé (86 % → 99 %) : elle
+n'a pas de bord franc, la couper net trancherait dedans. Le schéma du (4a) Pro
+n'en a pas — c'est un plan, il s'arrête sur une arête.
 
 **Style de LED** :
 
@@ -396,7 +482,9 @@ disque y est **plus clair** que les LEDs éteintes, l'inverse de `sharp`, sinon
 la trame disparaît.
 
 Une LED est considérée éteinte à `b ≤ 0,02`. La couleur allumée est
-`rgb(242, 242, 239)`, le blanc légèrement chaud des LEDs du Phone (3).
+`rgb(242, 242, 239)`, le blanc légèrement chaud des LEDs Nothing. Elle est
+commune aux deux appareils : le (4a) Pro annonce deux fois la luminance, mais
+une luminance n'est pas une teinte et rien ne dit que le blanc ait bougé.
 
 #### Grille en pixels entiers
 
@@ -414,28 +502,27 @@ fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
 de gap. La taille CSS du canvas est donc dérivée du backing (`size / dpr`),
 ratio exactement 1.
 
-#### Calage sur la photo
+#### Calage sur le dos
 
-Positions en **pourcentage du cadre photo**, jamais en pixels — c'est ce qui
-garde le calage au redimensionnement. Relevé repris de `SPECS-PREVIEW.md` du
-repo GlyphLapse, asset `phone3-back.webp` partagé.
+Positions en **pourcentage du cadre**, jamais en pixels — c'est ce qui garde le
+calage au redimensionnement. Les cotes sont dans le profil d'appareil (§ 2.1),
+pas dans le CSS : le composant de préview ne connaît aucun chiffre.
 
-| Élément | Position | Diamètre |
-|---|---|---:|
-| Disque de la matrice | 79,53 % / 15,36 % | 26,04 % |
-| Glyph Button | 84,53 % / 74,82 % | 15,86 % |
-| Rappel « maintenir » | 74,6 % / 74,82 % | — |
+Le relevé du (3) vient de `SPECS-PREVIEW.md` du repo GlyphLapse, asset
+`phone3-back.webp` partagé. Cadre en `aspect-ratio: 704/913`, rendu au plus à
+576 px de large → disque de 150 px, soit 6 px CSS par LED.
 
-Cadre en `aspect-ratio: 704/913`, rendu au plus à 576 px de large → disque de
-150 px, soit 6 px CSS par LED.
+Le rappel « maintenir » se range **du côté où il reste de la place** : à gauche
+du bouton sur un (3), qui l'a à droite du dos ; à droite sur un (4a) Pro, qui
+l'a à gauche. Ancré du mauvais côté, il sortirait du cadre.
 
-### 5.5 Lectures
+### 5.6 Lectures
 
-Sous la préview, en permanence : **LED allumées** `[nnn / 489]`, **moyenne**
+Sous la préview, en permanence : **LED allumées** `[nnn / ledCount]`, **moyenne**
 en pourcentage, **échelle** en pixels par LED. Ce sont des mesures de la trame
 courante, pas des estimations.
 
-### 5.6 Mise en page et défilement
+### 5.7 Mise en page et défilement
 
 Invariant commun aux deux largeurs : **la matrice est visible en permanence**,
 sans avoir à faire défiler quoi que ce soit. Régler un curseur sans voir son
@@ -507,9 +594,18 @@ page doit donc avoir son bloc conteneur explicitement déclaré.
 
 | Format | Contenu | Nom de fichier |
 |---|---|---|
-| PNG | disque à 24 px par LED (600 × 600), fond compris, **dans le style de LED affiché** | `glyphcast-<style>-<horodatage>.png` |
-| Kotlin | `val FRAME = intArrayOf(...)`, 625 valeurs 0-255 sur 25 lignes de 25, alignées | `glyphcast-<horodatage>.kt` |
-| JSON | trame **et** réglages | `glyphcast-<horodatage>.json` |
+| PNG | disque d'environ 600 px de côté, fond compris, **dans le style de LED affiché** | `glyphcast-<appareil>-<style>-<horodatage>.png` |
+| Kotlin | `val FRAME = intArrayOf(...)`, `size²` valeurs 0-255 sur `size` lignes de `size`, alignées | `glyphcast-<appareil>-<horodatage>.kt` |
+| JSON | trame **et** réglages **et** appareil | `glyphcast-<appareil>-<horodatage>.json` |
+
+**L'appareil est dans le nom de chaque fichier**, et en tête du Kotlin. Deux
+IntArrays de longueurs différentes finissent sinon par se croiser dans un projet
+Android, et le SDK ne dira rien avant l'exécution.
+
+Le PNG est calé sur un **côté visé** (600 px) plutôt que sur un nombre de pixels
+par LED : les deux appareils sortent des fichiers de même encombrement, et c'est
+la finesse de la matrice qui fait la différence, pas la taille de l'image.
+600 px donnent 24 px/LED sur un (3), 46 px/LED sur un (4a) Pro.
 
 Le Kotlin est aussi copiable dans le presse-papiers (`navigator.clipboard`,
 repli sur `textarea` + `execCommand`) et affiché en clair dans la carte
@@ -523,24 +619,36 @@ des tirets.
 ```json
 {
   "format": "glyphcast",
-  "version": "1.0",
-  "size": 25,
-  "ledCount": 489,
+  "version": "1.1",
+  "device": "phone4apro",
+  "size": 13,
+  "ledCount": 137,
   "params": { "zoom": 1, "wR": 0.2126, "...": "tous les réglages" },
-  "values": [0, 0, 102, "... 625 entiers 0-255"]
+  "values": [0, 0, 102, "... size² entiers 0-255"]
 }
 ```
 
+`device` vaut `"phone3"` ou `"phone4apro"`. `size` et `ledCount` restent
+présents pour la lecture humaine ; ils sont **dérivés** de `device` et ne sont
+pas relus.
+
 ### Import
 
-`format` doit valoir `"glyphcast"`, sinon rejet. Seuls les **réglages** sont
-relus : `values` est ignoré et recalculé depuis l'image chargée. Un `.json`
-rechargé sans image ne fait donc que restaurer les curseurs.
+`format` doit valoir `"glyphcast"`, sinon rejet. Sont relus les **réglages** et
+l'**appareil** : `values` est ignoré et recalculé depuis l'image chargée. Un
+`.json` rechargé sans image ne fait donc que restaurer les curseurs et la
+matrice cible.
 
-Chaque valeur est bornée aux plages du § 5.2 et retombe sur le défaut si elle
-est absente ou non finie ; `dither` doit être l'une des trois valeurs connues.
-Un fichier édité à la main ne peut pas mettre le pipeline dans un état
-impossible — `levels = 0` donnerait une division par zéro.
+Relire une session sur l'autre grille redonnerait d'autres valeurs sous les
+mêmes réglages — d'où le fait que l'appareil voyage avec elle. Un fichier de la
+version 1.0, où le Phone (3) était seul, n'a pas de champ `device` : il retombe
+sur le (3), ce qui est exactement ce qu'il décrivait.
+
+Chaque valeur est bornée aux plages du § 5.3 et retombe sur le défaut si elle
+est absente ou non finie ; `dither` doit être l'une des trois valeurs connues,
+`device` l'un des identifiants connus. Un fichier édité à la main ne peut pas
+mettre le pipeline dans un état impossible — `levels = 0` donnerait une division
+par zéro, un `device` inventé une grille sans géométrie.
 
 ---
 
@@ -548,12 +656,16 @@ impossible — `levels = 0` donnerait une division par zéro.
 
 Vrais après chaque conversion, quels que soient l'image et les réglages :
 
-1. `values.length === 625`, indexé en row-major.
-2. `values[i] === 0` pour les 136 cellules hors disque.
+1. `values.length === device.cells`, indexé en row-major.
+2. `values[i] === 0` pour toute cellule hors disque.
 3. `0 ≤ values[i] ≤ plafond` pour toutes les cellules.
-4. `lit` ≤ 489 et compte exactement les cellules `> 0`.
+4. `lit` ≤ `device.ledCount` et compte exactement les cellules `> 0`.
 5. Aucune requête réseau n'est émise après le chargement de la page. Le
    chargement lui-même appelle Google Fonts pour Geist Mono — voir § 1.
-6. Deux `Params` égaux sur la même image produisent des `values` identiques —
-   le dithering est déterministe, la trame de Bayer est fixe et le serpentin
-   de Floyd-Steinberg parcourt toujours la grille dans le même ordre.
+6. Deux `Params` égaux sur la même image et le même appareil produisent des
+   `values` identiques — le dithering est déterministe, la trame de Bayer est
+   fixe et le serpentin de Floyd-Steinberg parcourt toujours la grille dans le
+   même ordre.
+7. Changer d'appareil ne modifie **aucun** `Params`, et n'exige ni de recharger
+   l'image ni de refaire un réglage. C'est le seul état qui bouge.
+

@@ -14,13 +14,14 @@
  * Le downsample se fait en lumière **linéaire** : moyenner des valeurs sRGB
  * assombrit les zones contrastées (le classique gris à 50 % d'un damier
  * noir/blanc, qui devrait être ~73 % en sRGB).
+ *
+ * Chaque étape lit sa taille de grille dans le profil d'appareil. Les réglages,
+ * eux, n'en dépendent pas : ce sont des grandeurs photographiques, pas des
+ * mesures en LEDs. C'est ce qui permet de basculer d'un appareil à l'autre sans
+ * rien perdre — seule la grille change sous l'image.
  */
 
-import { SIZE, CELLS, isInside } from "./matrix";
-
-/** Facteur de supersampling : chaque LED intègre SS x SS pixels sources. */
-const SS = 8;
-const SAMPLE = SIZE * SS; // 200 x 200
+import type { Device } from "./devices";
 
 export type DitherMode = "none" | "floyd" | "bayer";
 
@@ -104,35 +105,34 @@ function encodeSrgb(l: number): number {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Dessine la source dans un canvas SAMPLE x SAMPLE, cadrée en cover, sur fond
+ * Dessine la source dans un canvas `sample × sample`, cadrée en cover, sur fond
  * noir : une image à canal alpha voit ses zones transparentes s'éteindre, ce
  * qui est le comportement attendu d'un rendu LED.
  */
 export function sampleSource(
+  d: Device,
   src: CanvasImageSource,
   srcW: number,
   srcH: number,
   p: Params,
   target?: HTMLCanvasElement,
 ): HTMLCanvasElement {
+  const S = d.sample;
   const cvs = target ?? document.createElement("canvas");
-  cvs.width = cvs.height = SAMPLE;
+  cvs.width = cvs.height = S;
   const ctx = cvs.getContext("2d", { willReadFrequently: true })!;
 
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, SAMPLE, SAMPLE);
+  ctx.fillRect(0, 0, S, S);
 
   // cover : la plus grande des deux échelles, pour que l'image couvre le cadre
-  const cover = Math.max(SAMPLE / srcW, SAMPLE / srcH);
+  const cover = Math.max(S / srcW, S / srcH);
   const s = cover * Math.max(0.05, p.zoom);
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.translate(
-    SAMPLE / 2 + (p.offsetX * SAMPLE) / 2,
-    SAMPLE / 2 + (p.offsetY * SAMPLE) / 2,
-  );
+  ctx.translate(S / 2 + (p.offsetX * S) / 2, S / 2 + (p.offsetY * S) / 2);
   ctx.rotate((p.rotation * Math.PI) / 180);
   ctx.scale(s, s);
   ctx.drawImage(src, -srcW / 2, -srcH / 2, srcW, srcH);
@@ -142,10 +142,10 @@ export function sampleSource(
 }
 
 /* -------------------------------------------------------------------------- */
-/* 2. Moyenne de zone -> 25 x 25 perceptuel                                    */
+/* 2. Moyenne de zone -> grille perceptuelle                                   */
 /* -------------------------------------------------------------------------- */
 
-function downsample(data: Uint8ClampedArray, p: Params): Float32Array {
+function downsample(d: Device, data: Uint8ClampedArray, p: Params): Float32Array {
   // les poids sont normalisés : monter R sans toucher G/B ne doit pas
   // surexposer l'image entière, ça doit rééquilibrer les teintes
   const sum = p.wR + p.wG + p.wB;
@@ -154,17 +154,18 @@ function downsample(data: Uint8ClampedArray, p: Params): Float32Array {
   const wG = p.wG / n;
   const wB = p.wB / n;
 
-  const out = new Float32Array(CELLS);
-  const inv = 1 / (SS * SS);
+  const { size, ss, sample } = d;
+  const out = new Float32Array(d.cells);
+  const inv = 1 / (ss * ss);
 
-  for (let cy = 0; cy < SIZE; cy++) {
-    for (let cx = 0; cx < SIZE; cx++) {
+  for (let cy = 0; cy < size; cy++) {
+    for (let cx = 0; cx < size; cx++) {
       let acc = 0;
-      const y0 = cy * SS;
-      const x0 = cx * SS;
-      for (let y = 0; y < SS; y++) {
-        let o = ((y0 + y) * SAMPLE + x0) * 4;
-        for (let x = 0; x < SS; x++, o += 4) {
+      const y0 = cy * ss;
+      const x0 = cx * ss;
+      for (let y = 0; y < ss; y++) {
+        let o = ((y0 + y) * sample + x0) * 4;
+        for (let x = 0; x < ss; x++, o += 4) {
           acc +=
             wR * TO_LINEAR[data[o]] +
             wG * TO_LINEAR[data[o + 1]] +
@@ -173,38 +174,45 @@ function downsample(data: Uint8ClampedArray, p: Params): Float32Array {
       }
       // ré-encodage perceptuel : la valeur d'une LED est une consigne PWM, mais
       // l'œil la lit en gamma. Sans ce retour en sRGB tout le rendu est trop sombre.
-      out[cy * SIZE + cx] = encodeSrgb(Math.max(0, acc * inv));
+      out[cy * size + cx] = encodeSrgb(Math.max(0, acc * inv));
     }
   }
   return out;
 }
 
 /* -------------------------------------------------------------------------- */
-/* 3. Netteté (unsharp mask sur la grille 25 x 25)                             */
+/* 3. Netteté (unsharp mask sur la grille de LEDs)                             */
 /* -------------------------------------------------------------------------- */
 
-function unsharp(v: Float32Array, amount: number): Float32Array {
+/**
+ * Le noyau reste 3 × 3 **en LEDs** sur les deux appareils. C'est l'invariant
+ * qui compte : la netteté agit sur le voisinage d'une LED, pas sur une distance
+ * en pixels d'image. Un curseur réglé sur le (3) fait donc la même chose sur le
+ * (4a) Pro — à cette réserve près qu'il y porte trois fois plus loin en surface.
+ */
+function unsharp(d: Device, v: Float32Array, amount: number): Float32Array {
   if (amount <= 0.001) return v;
-  const blur = new Float32Array(CELLS);
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+  const { size, cells } = d;
+  const blur = new Float32Array(cells);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       let acc = 0;
       let w = 0;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const yy = y + dy;
           const xx = x + dx;
-          if (yy < 0 || yy >= SIZE || xx < 0 || xx >= SIZE) continue;
+          if (yy < 0 || yy >= size || xx < 0 || xx >= size) continue;
           const k = dx === 0 && dy === 0 ? 4 : dx === 0 || dy === 0 ? 2 : 1;
-          acc += v[yy * SIZE + xx] * k;
+          acc += v[yy * size + xx] * k;
           w += k;
         }
       }
-      blur[y * SIZE + x] = acc / w;
+      blur[y * size + x] = acc / w;
     }
   }
-  const out = new Float32Array(CELLS);
-  for (let i = 0; i < CELLS; i++) out[i] = v[i] + amount * (v[i] - blur[i]);
+  const out = new Float32Array(cells);
+  for (let i = 0; i < cells; i++) out[i] = v[i] + amount * (v[i] - blur[i]);
   return out;
 }
 
@@ -212,7 +220,7 @@ function unsharp(v: Float32Array, amount: number): Float32Array {
 /* 4. Tonalité                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function tone(v: Float32Array, p: Params): Float32Array {
+function tone(d: Device, v: Float32Array, p: Params): Float32Array {
   const gain = Math.pow(2, p.exposure);
   // garde-fou : black >= white produirait une division par ~0 et un rendu binaire
   const lo = Math.min(p.black, p.white - 0.01);
@@ -220,8 +228,8 @@ function tone(v: Float32Array, p: Params): Float32Array {
   const k = 1 + Math.max(-0.99, p.contrast);
   const g = Math.max(0.05, p.gamma);
 
-  const out = new Float32Array(CELLS);
-  for (let i = 0; i < CELLS; i++) {
+  const out = new Float32Array(d.cells);
+  for (let i = 0; i < d.cells; i++) {
     let x = v[i] * gain;
     x = (x - lo) / span; // gates : point noir / point blanc
     x = (x - 0.5) * k + 0.5; // contraste autour du gris moyen
@@ -243,10 +251,11 @@ const BAYER4 = [
   15,  7, 13,  5,
 ];
 
-function quantize(v: Float32Array, p: Params): Float32Array {
+function quantize(d: Device, v: Float32Array, p: Params): Float32Array {
+  const { size, cells, isInside } = d;
   const levels = Math.max(2, Math.round(p.levels));
   const step = 1 / (levels - 1);
-  const out = new Float32Array(CELLS);
+  const out = new Float32Array(cells);
 
   if (p.dither === "floyd") {
     // Diffusion d'erreur en serpentin. L'erreur n'est propagée qu'aux cellules
@@ -254,33 +263,33 @@ function quantize(v: Float32Array, p: Params): Float32Array {
     // assombrirait tout le bord de la matrice.
     const buf = Float32Array.from(v);
     const push = (x: number, y: number, e: number) => {
-      if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
-      const i = y * SIZE + x;
+      if (x < 0 || x >= size || y < 0 || y >= size) return;
+      const i = y * size + x;
       if (isInside[i]) buf[i] += e;
     };
-    for (let y = 0; y < SIZE; y++) {
+    for (let y = 0; y < size; y++) {
       const ltr = y % 2 === 0;
-      for (let n = 0; n < SIZE; n++) {
-        const x = ltr ? n : SIZE - 1 - n;
-        const i = y * SIZE + x;
+      for (let n = 0; n < size; n++) {
+        const x = ltr ? n : size - 1 - n;
+        const i = y * size + x;
         if (!isInside[i]) continue;
         const old = buf[i];
         const q = Math.min(1, Math.max(0, Math.round(old / step) * step));
         out[i] = q;
         const e = (old - q) * p.ditherAmount;
-        const d = ltr ? 1 : -1;
-        push(x + d, y, (e * 7) / 16);
-        push(x - d, y + 1, (e * 3) / 16);
+        const dx = ltr ? 1 : -1;
+        push(x + dx, y, (e * 7) / 16);
+        push(x - dx, y + 1, (e * 3) / 16);
         push(x, y + 1, (e * 5) / 16);
-        push(x + d, y + 1, (e * 1) / 16);
+        push(x + dx, y + 1, (e * 1) / 16);
       }
     }
     return out;
   }
 
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const i = y * SIZE + x;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
       if (!isInside[i]) continue;
       let val = v[i];
       if (p.dither === "bayer") {
@@ -298,39 +307,48 @@ function quantize(v: Float32Array, p: Params): Float32Array {
 /* -------------------------------------------------------------------------- */
 
 export type Frame = {
-  /** 625 valeurs 0..1, row-major, 0 hors disque. */
+  /**
+   * L'appareil qui a produit la trame. Porté par la trame et non passé à part :
+   * un rendu, un export ou un compteur ne peut alors pas se tromper de
+   * géométrie, même en pleine bascule d'appareil.
+   */
+  device: Device;
+  /** `device.cells` valeurs 0..1, row-major, 0 hors disque. */
   values: Float32Array;
-  /** Nombre de LEDs allumées (> 0) parmi les 489 du disque. */
+  /** Nombre de LEDs allumées (> 0) parmi les `device.ledCount` du disque. */
   lit: number;
   /** Luminosité moyenne sur le disque, 0..1. */
   mean: number;
 };
 
-const EMPTY: Frame = { values: new Float32Array(CELLS), lit: 0, mean: 0 };
+export function emptyFrame(d: Device): Frame {
+  return { device: d, values: new Float32Array(d.cells), lit: 0, mean: 0 };
+}
 
 export function convert(
+  d: Device,
   src: CanvasImageSource | null,
   srcW: number,
   srcH: number,
   p: Params,
   scratch?: HTMLCanvasElement,
 ): Frame {
-  if (!src || !srcW || !srcH) return EMPTY;
+  if (!src || !srcW || !srcH) return emptyFrame(d);
 
-  const cvs = sampleSource(src, srcW, srcH, p, scratch);
+  const cvs = sampleSource(d, src, srcW, srcH, p, scratch);
   const ctx = cvs.getContext("2d", { willReadFrequently: true })!;
-  const { data } = ctx.getImageData(0, 0, SAMPLE, SAMPLE);
+  const { data } = ctx.getImageData(0, 0, d.sample, d.sample);
 
-  let v = downsample(data, p);
-  v = unsharp(v, p.sharpen);
-  v = tone(v, p);
-  v = quantize(v, p);
+  let v = downsample(d, data, p);
+  v = unsharp(d, v, p.sharpen);
+  v = tone(d, v, p);
+  v = quantize(d, v, p);
 
   const ceiling = Math.min(1, Math.max(0, p.ceiling));
   let lit = 0;
   let sum = 0;
-  for (let i = 0; i < CELLS; i++) {
-    if (!isInside[i]) {
+  for (let i = 0; i < d.cells; i++) {
+    if (!d.isInside[i]) {
       v[i] = 0;
       continue;
     }
@@ -339,12 +357,12 @@ export function convert(
     sum += v[i];
   }
 
-  return { values: v, lit, mean: sum / (lit || 1) };
+  return { device: d, values: v, lit, mean: sum / (lit || 1) };
 }
 
 /** Conversion en consignes 0-255, le format attendu par le Glyph Matrix SDK. */
 export function toBytes(f: Frame): Uint8Array {
-  const out = new Uint8Array(CELLS);
-  for (let i = 0; i < CELLS; i++) out[i] = Math.round(f.values[i] * 255);
+  const out = new Uint8Array(f.device.cells);
+  for (let i = 0; i < out.length; i++) out[i] = Math.round(f.values[i] * 255);
   return out;
 }

@@ -6,9 +6,13 @@
  * produit une trame irrégulière : une colonne sur n gagne un pixel de gap.
  * La grille est donc calculée depuis le devicePixelRatio, comme dans la préview
  * de GlyphLapse.
+ *
+ * La géométrie vient de la trame elle-même (`frame.device`) : il n'y a pas de
+ * taille de grille à passer en second argument, donc pas de façon de la
+ * désaccorder du contenu.
  */
 
-import { SIZE, inside } from "./matrix";
+import type { Device } from "./devices";
 import type { Frame } from "./pipeline";
 
 export type Grid = {
@@ -22,18 +26,28 @@ export type Grid = {
 
 /**
  * Grille pour un affichage écran, calibrée sur `cellCss` px CSS par LED.
- * 6 px CSS × 25 = 150 px, soit le diamètre réel de la matrice quand le
- * téléphone est rendu à 576 px de large (26,04 % du cadre photo).
+ * Sur un Phone (3), 6 px CSS × 25 = 150 px, soit le diamètre réel de la matrice
+ * quand le téléphone est rendu à 576 px de large (26,04 % du cadre photo).
  */
-export function screenGrid(cellCss = 6, dpr = window.devicePixelRatio || 1): Grid {
+export function screenGrid(
+  d: Device,
+  cellCss = 6,
+  dpr = window.devicePixelRatio || 1,
+): Grid {
   const cell = Math.max(3, Math.round(cellCss * dpr));
-  const size = SIZE * cell;
+  const size = d.size * cell;
   return { cell, size, cssSize: size / dpr };
 }
 
-/** Grille pour un export PNG : `cell` px de backing par LED. */
-export function exportGrid(cell: number): Grid {
-  const size = SIZE * cell;
+/**
+ * Grille pour un export PNG, calée sur un côté visé plutôt que sur un nombre de
+ * pixels par LED : les deux appareils sortent des fichiers de même encombrement,
+ * et c'est la finesse de la matrice qui fait la différence, pas la taille du
+ * PNG. 600 px → 24 px/LED sur le (3), 46 px/LED sur le (4a) Pro.
+ */
+export function exportGrid(d: Device, target = 600): Grid {
+  const cell = Math.max(1, Math.round(target / d.size));
+  const size = d.size * cell;
   return { cell, size, cssSize: size };
 }
 
@@ -42,7 +56,7 @@ export function exportGrid(cell: number): Grid {
  *
  * - `sharp` — émulation 1:1 de l'appareil : LED carrée, halo proportionnel à
  *   la luminosité, plancher de 0,25 pour qu'une LED à 1 % se lise quand même
- *   comme allumée. C'est ce qu'on voit sur le dos d'un Phone (3).
+ *   comme allumée. C'est ce qu'on voit sur le dos de l'appareil.
  * - `soft` — affichage tel quel sur un écran : angles légèrement adoucis,
  *   aucun halo, gap plus large, rampe quasi linéaire. Les nuances se lisent
  *   mieux, mais ce n'est plus ce que rend l'appareil.
@@ -55,7 +69,7 @@ export type PaintOpts = {
   background?: string | null;
 };
 
-const ON = "242,242,239"; // blanc légèrement chaud des LEDs du Phone (3)
+const ON = "242,242,239"; // blanc légèrement chaud des LEDs Nothing
 
 /** Fond du disque par style — en soft il est plus clair que les LEDs éteintes. */
 export const DISC_BG: Record<LedStyle, string> = { sharp: "#08080a", soft: "#131316" };
@@ -79,6 +93,7 @@ export function paint(
   opts: PaintOpts = {},
 ): void {
   const { style = "sharp", background = null } = opts;
+  const { size, inside } = frame.device;
   const { led, pad } = ledMetrics(g.cell, style);
   const radius = style === "soft" ? led * 0.24 : 0;
   const rounded = radius > 0.5 && typeof ctx.roundRect === "function";
@@ -94,8 +109,8 @@ export function paint(
   }
 
   for (const i of inside) {
-    const x = i % SIZE;
-    const y = (i - x) / SIZE;
+    const x = i % size;
+    const y = (i - x) / size;
     const b = frame.values[i];
 
     if (b <= 0.02) {

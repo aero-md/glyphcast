@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { LED_COUNT, SIZE, inside } from "./lib/matrix";
+  import {
+    DEFAULT_DEVICE,
+    DEVICES,
+    deviceById,
+    type Device,
+    type DeviceId,
+  } from "./lib/devices";
   import { CHANNEL_PRESETS, DEFAULTS, convert, type DitherMode, type Params } from "./lib/pipeline";
   import {
     RANGES as R,
@@ -29,6 +35,11 @@
   let objectUrl: string | null = null;
 
   /* --- réglages --- */
+  /* L'appareil ne fait que changer la grille sous l'image : aucun réglage n'est
+     exprimé en LEDs, ils sont tous photographiques. Basculer préserve donc la
+     source, le cadrage et toute la tonalité — c'est ce qui rend la comparaison
+     entre les deux matrices utile plutôt que théorique. */
+  let device = $state<Device>(DEFAULT_DEVICE);
   let params = $state<Params>({ ...DEFAULTS });
   let mode = $state<PreviewMode>("phone");
   let ledStyle = $state<LedStyle>("sharp");
@@ -75,7 +86,7 @@
   const scratchA = document.createElement("canvas");
   const scratchB = document.createElement("canvas");
 
-  const frame = $derived(convert(img, srcW, srcH, params, scratchA));
+  const frame = $derived(convert(device, img, srcW, srcH, params, scratchA));
 
   /* Rendu « brut » : même cadrage, tonalité au repos, sans dither. Ce que
      donnerait l'image sans aucun réglage — la référence de l'A/B. */
@@ -86,7 +97,7 @@
     offsetY: params.offsetY,
     rotation: params.rotation,
   });
-  const rawFrame = $derived(convert(img, srcW, srcH, rawParams, scratchB));
+  const rawFrame = $derived(convert(device, img, srcW, srcH, rawParams, scratchB));
 
   const kotlin = $derived(toKotlin(frame));
   const hasImg = $derived(!!img);
@@ -152,17 +163,18 @@
   function autoLevels() {
     if (!img) return;
     const probe = convert(
+      device,
       img,
       srcW,
       srcH,
       { ...params, black: 0, white: 1, contrast: 0, gamma: 1, levels: 256, dither: "none" },
       scratchB,
     );
-    // uniquement les cellules du disque : les 136 cellules hors masque valent
-    // toujours 0 et clouaient le point noir à 0 quelle que soit l'image
+    // uniquement les cellules du disque : celles hors masque valent toujours 0
+    // et clouaient le point noir à 0 quelle que soit l'image
     let lo = 1;
     let hi = 0;
-    for (const i of inside) {
+    for (const i of device.inside) {
       const v = probe.values[i];
       if (v < lo) lo = v;
       if (v > hi) hi = v;
@@ -186,11 +198,20 @@
     input.value = "";
     if (!file) return;
     try {
-      params = parseSession(await file.text());
-      flash("Session rechargée");
+      // une session porte l'appareil sur lequel elle a été calculée : la relire
+      // sur l'autre grille redonnerait d'autres valeurs sous les mêmes réglages
+      const s = parseSession(await file.text());
+      device = s.device;
+      params = s.params;
+      flash(`Session rechargée — ${s.device.name}`);
     } catch {
       flash("JSON illisible");
     }
+  }
+
+  function pickDevice(id: DeviceId) {
+    device = deviceById(id);
+    flash(`${device.name} — ${device.size}×${device.size}, ${device.ledCount} LEDs`);
   }
 
   /* Millésime lu à l'exécution, pas écrit en dur : un pied de page figé sur
@@ -230,7 +251,7 @@
          aux points et aux LEDs. -->
     <div class="h-row">
       <p class="sub meta">
-        Nothing Phone (3) • Stylisez une image en la projetant sur la Glyph Matrix
+        {device.name} • Stylisez une image en la projetant sur la Glyph Matrix
       </p>
       <ThemeToggle />
     </div>
@@ -239,6 +260,15 @@
   <main>
     <div class="col-preview" bind:clientWidth={colW}>
       <div class="scale">
+        <!-- L'appareil vient en premier : c'est le seul de ces trois réglages
+             qui change ce qui sort de l'outil, les deux autres ne changent que
+             ce qu'on en voit. -->
+        <Seg
+          label="Appareil"
+          value={device.id}
+          options={DEVICES.map((d) => ({ v: d.id, t: d.ref }))}
+          onchange={pickDevice}
+        />
         <Seg
           label="Échelle de préview"
           bind:value={mode}
@@ -416,7 +446,7 @@
         </p>
       </Card>
 
-      <Card ref="06" title="Export" stat="{LED_COUNT} / {SIZE * SIZE}">
+      <Card ref="06" title="Export" stat="{device.ledCount} / {device.cells}">
         <div class="btns">
           <button type="button" onclick={() => exportPng(frame, ledStyle)} disabled={!hasImg}>
             PNG · {ledStyle}
@@ -434,7 +464,8 @@
     <div class="f-row">
       <span class="ref">[{VERSION}]</span>
       <span class="meta">
-        Row-major {SIZE}×{SIZE}, valeurs 0-255, masque circulaire r = 12,5 → {LED_COUNT} LEDs.
+        Row-major {device.size}×{device.size}, valeurs 0-255, masque circulaire r =
+        {String(device.radius).replace(".", ",")} → {device.ledCount} LEDs.
       </span>
       <a class="sig" href="https://github.com/aero-md" target="_blank" rel="noopener noreferrer">
         © {YEAR} aero-md

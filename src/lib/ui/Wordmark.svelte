@@ -2,16 +2,17 @@
   /* Wordmark : chaque capitale est une trame 7 × 7 dessinée à la main, et
      surtout une trame VALIDE — aucun point ne tombe hors du disque. Une lettre
      est donc théoriquement affichable telle quelle sur une Glyph Matrix 7 × 7,
-     comme les 25 × 25 de l'appli le sont sur un Phone (3). C'est ce qui donne
-     au wordmark le droit d'être là : ce n'est pas une évocation de matrice,
-     c'en est une. */
+     comme les grilles de l'appli le sont sur un Nothing Phone. C'est ce qui
+     donne au wordmark le droit d'être là : ce n'est pas une évocation de
+     matrice, c'en est une. */
 
-  /** Côté de la matrice d'une capitale, et son masque — même convention que
-      `matrix.ts` : centre au milieu, `d < r`, les coins n'existent pas.
-      37 cellules sur 49. */
+  import { buildGeometry } from "../matrix";
+
+  /** Côté de la matrice d'une capitale, et son masque — celui de `matrix.ts`,
+      littéralement : même fonction que pour les appareils, à une autre taille.
+      Centre au milieu, `d < r`, les coins n'existent pas. 37 cellules sur 49. */
   const M = 7;
-  const MC = (M - 1) / 2;
-  const MR = M / 2;
+  const MASK = buildGeometry(M);
 
   /* Ce que le disque ouvre réellement, rangée par rangée :
 
@@ -51,7 +52,7 @@
         if (row.length !== M)
           console.error(`Wordmark « ${ch} » rangée ${y} : ${row.length} colonnes au lieu de ${M}`);
         for (let x = 0; x < row.length; x++)
-          if (row[x] === "#" && Math.hypot(x - MC, y - MC) >= MR)
+          if (row[x] === "#" && !MASK.isInside[y * M + x])
             console.error(`Wordmark « ${ch} » : la cellule (${x}, ${y}) est hors du disque`);
       });
     }

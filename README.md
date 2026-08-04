@@ -2,9 +2,10 @@
 
 [Preview at https://glyph.suns.red](https://glyph.suns.red)
 
-Convertit une image en rendu **Glyph Matrix** pour Nothing Phone (3), avec
-préview posée sur le dos de l'appareil et un rack de réglages pour fine-tuner
-le passage image → LEDs.
+Convertit une image en rendu **Glyph Matrix** pour Nothing Phone — **(3)** et
+**(4a) Pro** — avec préview posée sur le dos de l'appareil et un rack de
+réglages pour fine-tuner le passage image → LEDs. On bascule d'une matrice à
+l'autre d'un clic, sans rien reperdre.
 
 Tout se passe dans le navigateur : l'image n'est jamais envoyée nulle part, et
 l'appli n'émet aucune requête réseau une fois chargée. Seul le chargement va
@@ -22,6 +23,10 @@ Le détail fonctionnel — formules, bornes, invariants, schéma JSON — est da
 
 ## Fonctions
 
+- **Choisir l'appareil** : `(3)` ou `(4a) Pro`. La bascule ne touche à rien
+  d'autre — même image, mêmes réglages, seule la grille change dessous. C'est ce
+  qui permet de régler une fois et de lire en un clic ce que chacune des deux
+  matrices garde de l'image.
 - **Importer une image** par glisser-déposer n'importe où sur la page, par
   collage (`Ctrl+V`) ou par sélecteur de fichier. Tant qu'il n'y a pas d'image,
   la carte `[01] Source` est la seule chose cliquable : elle est encadrée
@@ -53,21 +58,35 @@ Ce qu'il ne fait pas : pas d'animation ni de séquence, pas d'envoi direct à
 l'appareil (aucune API navigateur ne le permet — la passerelle est l'export
 Kotlin), pas de retouche locale.
 
-## La matrice
+## Les matrices
 
-| Constante | Valeur |
-|---|---:|
-| Grille | 25 × 25 = 625 cellules, row-major |
-| Masque | disque centré sur (12, 12), rayon 12,5 |
-| LEDs pilotables | **489** |
-| Couleur | aucune — luminosité seule, 0-255 par LED |
+Même construction dans les deux cas : une grille carrée en row-major, masquée
+par un disque centré de rayon `size / 2`. Les deux comptes publiés de LEDs
+tombent juste avec cette seule formule — c'est ce qui permet de n'avoir qu'un
+seul pipeline.
 
-Géométrie et calage de la photo repris de
+| | Phone (3) | Phone (4a) Pro |
+|---|---:|---:|
+| Grille | 25 × 25 = 625 cellules | 13 × 13 = 169 cellules |
+| Masque | disque (12, 12), r = 12,5 | disque (6, 6), r = 6,5 |
+| LEDs pilotables | **489** | **137** |
+| Diamètre du disque | 26,04 % de la largeur | 40,9 % — 57 % de plus |
+| Couleur | aucune — luminosité seule, 0-255 par LED | idem |
+
+Rien n'est écrit en dur : `buildGeometry(size)` recalcule tout, et un appareil
+n'est qu'une entrée de `src/lib/devices.ts`.
+
+Géométrie et calage de la photo du (3) repris de
 [`glyphlapse`](https://github.com/aero-md/glyphlapse) — `SPECS.md` et
-`SPECS-PREVIEW.md`. Le disque est à 79,53 % / 15,36 % du cadre
-photo, diamètre 26,04 % ; le Glyph Button à 84,53 % / 74,82 %. Toutes les
-positions sont en pourcentage, jamais en pixels : c'est ce qui garde le calage
-quand la préview est redimensionnée.
+`SPECS-PREVIEW.md`. Toutes les positions sont en pourcentage du cadre, jamais en
+pixels : c'est ce qui garde le calage quand la préview est redimensionnée.
+
+Le dos du **(4a) Pro** est un **schéma**, pas une photo. Ce qui y est exact : la
+grille 13 × 13, les 137 LEDs et le diamètre du disque — 57 % de plus que celui
+du (3) à largeur d'appareil égale, la seule cote publiée, et celle qui fixe
+l'échelle réelle des LEDs. La découpe du plateau caméra, les trois objectifs et
+la position du bouton sont approximatifs : faute de photo, un plan au filet
+s'assume mieux qu'un rendu qui se ferait passer pour l'objet.
 
 ## Chaîne de conversion
 
@@ -75,16 +94,22 @@ quand la préview est redimensionnée.
 
 ```
 cadrage (zoom / décalage / rotation, cover sur fond noir)
-  → supersample 200 × 200            8 × 8 échantillons par LED
+  → supersample ~200 × 200           8 × 8 par LED sur un (3), 15 × 15 sur un (4a) Pro
   → linéarisation sRGB
   → luma = wR·R + wG·G + wB·B        poids normalisés
-  → moyenne de zone → 25 × 25
+  → moyenne de zone → size × size
   → ré-encodage sRGB                 la valeur redevient perceptuelle
   → netteté (unsharp 3 × 3)
   → exposition → gates noir/blanc → contraste → gamma → inversion
   → quantification N paliers (+ Floyd-Steinberg ou Bayer 4 × 4)
   → plafond de luminosité → masque disque
 ```
+
+Le facteur de supersampling **suit** la grille au lieu d'être figé : à facteur
+constant, la matrice la plus grossière n'échantillonnerait qu'un quart de la
+surface d'image, et l'aliasing reviendrait sur l'appareil qui en a le plus
+besoin. Aucun réglage, en revanche, n'est exprimé en LEDs — ce sont des
+grandeurs photographiques, et c'est pour ça que la bascule ne perd rien.
 
 Deux choix qui ne sont pas cosmétiques :
 
@@ -115,25 +140,37 @@ pousser hors du masque la ferait disparaître et assombrirait tout le bord.
 
 | Format | Contenu |
 |---|---|
-| PNG | disque rendu à 24 px par LED (600 × 600) |
-| IntArray Kotlin | `intArrayOf(...)` de 625 valeurs 0-255, row-major — à passer tel quel au `GlyphMatrixFrame` |
-| JSON | les 625 valeurs **et** tous les réglages, rechargeable |
+| PNG | disque rendu sur ~600 px de côté — 24 px par LED sur un (3), 46 px sur un (4a) Pro |
+| IntArray Kotlin | `intArrayOf(...)` de `size²` valeurs 0-255, row-major — à passer tel quel au `GlyphMatrixFrame` |
+| JSON | les valeurs, tous les réglages **et** l'appareil, rechargeable |
+
+**L'appareil est dans le nom de chaque fichier** (`glyphcast-phone4apro-…`) et
+en tête du Kotlin. Deux IntArrays de longueurs différentes finissent sinon par
+se croiser dans un projet Android, et le SDK ne dira rien avant l'exécution.
+
+Une session relue restaure aussi sa matrice cible : les mêmes réglages sur
+l'autre grille ne donneraient pas les mêmes valeurs. Un `.json` de la version
+1.0, où le (3) était seul, n'a pas de champ `device` et retombe sur le (3) —
+c'est exactement ce qu'il décrivait.
 
 ## Préview
 
 Deux échelles, au choix :
 
-- **Téléphone** — la matrice à sa taille réelle sur la photo du dos : 150 px de
-  diamètre pour un appareil rendu à 576 px de large, soit 6 px par LED.
-  Maintenir le Glyph Button compare avec le même cadrage et la tonalité au
-  repos.
+- **Téléphone** — la matrice à sa taille réelle sur le dos de l'appareil : à
+  576 px de large, 150 px de diamètre et 6 px par LED sur un (3), 236 px et
+  18 px par LED sur un (4a) Pro. C'est bien ce rapport-là qu'il s'agit de
+  montrer. Maintenir le Glyph Button compare avec le même cadrage et la tonalité
+  au repos.
 - **Grand** — le disque seul sur toute la largeur de la colonne, pour lire LED
   par LED ce que fait un curseur.
 
 Le téléphone n'est jamais réduit pour tenir dans la fenêtre — ce serait perdre
 l'échelle réelle, qui est tout l'intérêt du mode. Quand la place manque il est
 rogné par le bas : le disque est en haut de l'appareil, ce qu'on perd c'est le
-dos et le Glyph Button.
+dos et le Glyph Button. La hauteur gardée se déduit du bas du disque, elle n'est
+pas posée en dur — une constante partagée aurait décapité la matrice du (4a) Pro,
+deux fois plus large.
 
 Dans les deux cas une cellule occupe un nombre **entier** de pixels de canvas :
 un canvas redimensionné par le navigateur avec un ratio fractionnaire donne
@@ -150,13 +187,13 @@ donc calculée depuis le `devicePixelRatio`.
 | Rampe | plancher à 0,25 | quasi linéaire (0,08) |
 | Fond du disque | `#08080a` | `#131316`, plus clair que les LEDs éteintes |
 
-`sharp` émule l'appareil, c'est ce qu'on voit sur le dos d'un Phone (3).
+`sharp` émule l'appareil, c'est ce qu'on voit sur le dos d'un Nothing Phone.
 `soft` est fait pour un affichage tel quel sur un écran normal : sans halo
 pour porter l'intensité, un plancher haut écraserait tout le bas de la plage
 sur un même gris — d'où la rampe quasi linéaire.
 
 **L'export PNG suit le style affiché**, et le nomme dans le fichier
-(`glyphcast-soft-…​.png`).
+(`glyphcast-phone3-soft-…​.png`).
 
 ## Direction artistique
 
@@ -180,10 +217,11 @@ Ce cadre ne porte pas le message tout seul — c'est le verrouillage du reste du
 rack qui le porte. Il le confirme.
 
 Chaque capitale du wordmark est une **trame 7 × 7 dessinée à la main** — et une
-trame *valide* : aucun point ne tombe hors du disque, avec la même convention
-que `matrix.ts` (centre au milieu, `d < r`, les coins n'existent pas). Une
-lettre est donc théoriquement affichable telle quelle sur une Glyph Matrix
-7 × 7, comme les 25 × 25 de l'appli le sont sur un Phone (3). C'est ce qui donne
+trame *valide* : aucun point ne tombe hors du disque. Le masque n'est pas
+« la même convention que » celui des appareils, c'est le même `buildGeometry`,
+appelé avec 7 au lieu de 25 ou 13. Une lettre est donc théoriquement affichable
+telle quelle sur une Glyph Matrix 7 × 7, comme les grilles de l'appli le sont
+sur un Nothing Phone. C'est ce qui donne
 au wordmark le droit d'être là : ce n'est pas une évocation de matrice, c'en est
 une. L'invariant ne se voit pas à l'œil — un point hors disque rend exactement
 comme un point dedans — donc il est vérifié au chargement en dev.
@@ -251,8 +289,9 @@ ne peuvent donc pas suivre le thème.
 ## Structure
 
 ```
-src/lib/matrix.ts       géométrie 25 × 25 et masque circulaire
-src/lib/pipeline.ts     conversion image → 625 valeurs
+src/lib/matrix.ts       buildGeometry : grille carrée et masque circulaire
+src/lib/devices.ts      catalogue des appareils — géométrie + calage du dos
+src/lib/pipeline.ts     conversion image → size² valeurs
 src/lib/render.ts       peinture des LEDs sur canvas (écran et export)
 src/lib/export.ts       PNG / Kotlin / JSON, import de session
 src/lib/ui/             Preview, Slider, Seg, Card, Wordmark, ThemeToggle

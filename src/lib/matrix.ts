@@ -1,40 +1,79 @@
 /**
- * Géométrie de la Glyph Matrix du Nothing Phone (3).
+ * Géométrie d'une Glyph Matrix.
  *
- * Grille de 25 x 25 = 625 cellules en row-major (l'IntArray attendu par le
- * Glyph Matrix SDK), masquée par un disque centré sur (12, 12) de rayon 12,5 —
- * soit 489 LEDs réellement pilotables. Les cellules hors disque existent dans
- * le tableau mais restent à 0 : le SDK les ignore.
+ * Les deux matrices Nothing suivent la même construction : une grille carrée de
+ * N × N cellules en row-major — l'IntArray attendu par le Glyph Matrix SDK —
+ * masquée par un disque centré de rayon N/2. Les cellules hors disque existent
+ * dans le tableau mais restent à 0 : le SDK les ignore.
  *
- * Valeurs reprises de SPECS.md des repos GlyphLapse / GlyphSlot.
+ *   Phone (3)        25 × 25 = 625 cellules, r = 12,5  →  489 LEDs
+ *   Phone (4a) Pro   13 × 13 = 169 cellules, r =  6,5  →  137 LEDs
+ *
+ * Les deux comptes publiés tombent juste avec cette seule formule. C'est ce qui
+ * autorise un pipeline unique : changer d'appareil, c'est changer un `size`, pas
+ * brancher un deuxième moteur. Rien n'est écrit en dur, tout se recalcule.
  */
 
-export const SIZE = 25;
-export const CELLS = SIZE * SIZE; // 625
-export const CX = 12;
-export const CY = 12;
-export const RADIUS = 12.5;
+export type Geometry = {
+  /** Côté de la grille, en cellules. */
+  size: number;
+  /** `size²` — longueur de l'IntArray attendu par le SDK. */
+  cells: number;
+  /** Centre du disque, en coordonnées de cellule. */
+  cx: number;
+  cy: number;
+  /** Rayon du masque, en cellules. */
+  radius: number;
+  /** Indices row-major des cellules à l'intérieur du disque. */
+  inside: number[];
+  /** Masque par cellule — plus rapide qu'un `inside.includes()` en boucle. */
+  isInside: Uint8Array;
+  /** Nombre de LEDs pilotables. Calculé, jamais écrit en dur. */
+  ledCount: number;
+  /** Facteur de supersampling : chaque LED intègre `ss × ss` pixels source. */
+  ss: number;
+  /** Côté du canvas d'échantillonnage, `size × ss`. */
+  sample: number;
+};
 
-/** Distance de chaque cellule au centre, indexée en row-major. */
-export const dist = new Float32Array(CELLS);
+/**
+ * Côté visé pour le canvas d'échantillonnage. Le supersampling s'ajuste à la
+ * grille plutôt que d'être figé : à facteur constant, une matrice deux fois plus
+ * grossière n'échantillonnerait qu'un quart de la surface d'image et l'aliasing
+ * reviendrait sur l'appareil qui en a le plus besoin.
+ */
+const SAMPLE_TARGET = 200;
 
-/** Indices row-major des cellules à l'intérieur du disque. */
-export const inside: number[] = [];
+export function buildGeometry(size: number, radius = size / 2): Geometry {
+  const cells = size * size;
+  const cx = (size - 1) / 2;
+  const cy = cx;
 
-/** Masque booléen par cellule — plus rapide qu'un `inside.includes()` en boucle. */
-export const isInside = new Uint8Array(CELLS);
+  const inside: number[] = [];
+  const isInside = new Uint8Array(cells);
 
-for (let y = 0; y < SIZE; y++) {
-  for (let x = 0; x < SIZE; x++) {
-    const i = y * SIZE + x;
-    const d = Math.hypot(x - CX, y - CY);
-    dist[i] = d;
-    if (d < RADIUS) {
-      inside.push(i);
-      isInside[i] = 1;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      if (Math.hypot(x - cx, y - cy) < radius) {
+        inside.push(i);
+        isInside[i] = 1;
+      }
     }
   }
-}
 
-/** 489 sur un Phone (3). Calculé, jamais écrit en dur. */
-export const LED_COUNT = inside.length;
+  const ss = Math.max(3, Math.round(SAMPLE_TARGET / size));
+
+  return {
+    size,
+    cells,
+    cx,
+    cy,
+    radius,
+    inside,
+    isInside,
+    ledCount: inside.length,
+    ss,
+    sample: size * ss,
+  };
+}

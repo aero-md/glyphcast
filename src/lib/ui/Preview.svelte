@@ -5,33 +5,33 @@
 <script lang="ts">
   /* Deux échelles pour la même matrice.
      - « téléphone » : rendue à sa position et à son échelle réelles sur le dos
-       d'un Phone (3). Positions en pourcentage du cadre photo, jamais en px —
-       c'est ce qui garde le calage quand la préview est redimensionnée.
-       Relevé repris de SPECS-PREVIEW.md du repo GlyphLapse.
+       de l'appareil. Positions en pourcentage du cadre, jamais en px — c'est ce
+       qui garde le calage quand la préview est redimensionnée. Tout vient du
+       profil : le (3) est un relevé sur photo, le (4a) Pro un schéma coté.
      - « grand » : le disque seul sur toute la largeur de la colonne, pour lire
-       LED par LED ce que fait un réglage. */
+       LED par LED ce que fait un réglage.
+
+     La géométrie n'est jamais passée en propriété : elle est lue dans
+     `frame.device`. Une trame et son cadre ne peuvent donc pas se désaccorder
+     pendant une bascule d'appareil. */
   import { onMount } from "svelte";
-  import { LED_COUNT, SIZE } from "../matrix";
+  import { previewBand, type Disc } from "../devices";
   import type { Frame } from "../pipeline";
   import { DISC_BG, paint, screenGrid, type Grid, type LedStyle } from "../render";
 
-  /* Calage de la photo. Le diamètre du disque est posé en ligne plutôt qu'en
-     CSS : la taille de cellule s'en déduit, une seule source évite qu'un des
-     deux dérive. */
-  const DISC_PCT = 0.2604;
+  /* Largeur de référence du cadre. Le téléphone n'est jamais réduit pour tenir
+     dans la fenêtre : à 576 px de large, la matrice d'un Phone (3) fait 150 px,
+     soit 6 px CSS par LED — son échelle réelle. La rétrécir viderait le mode
+     « téléphone » de son sens. Seule une colonne plus étroite le contraint. */
   const FULL = 576;
 
   /* Colonne unique : la préview est épinglée en haut de l'écran et le rack
      défile dessous, pour qu'on voie l'effet d'un curseur pendant qu'on le
-     manipule. On n'en garde donc qu'une bande.
-     - BAND est la fraction de la largeur du téléphone qu'on conserve. Le bas du
-       disque tombe à 0,329 de cette largeur (centre à 15,36 % de la hauteur,
-       rayon à 13,02 % de la largeur, cadre en 704/913) : à 0,5 il reste de la
-       marge dessous et le fondu ne mord pas sur les LEDs.
+     manipule. On n'en garde donc qu'une bande, dont la hauteur se déduit du bas
+     du disque (voir `previewBand`).
      - SHARE plafonne la bande en hauteur d'écran, sinon un appareil large sur
        un écran court ne laisserait rien au rack.
      - NARROW double le point de rupture du CSS. */
-  const BAND = 0.5;
   const SHARE = 0.4;
   const NARROW = 980;
 
@@ -64,46 +64,58 @@
     return () => window.removeEventListener("resize", sync);
   });
 
-  /* Le téléphone n'est jamais réduit pour tenir dans la fenêtre : à 576 px de
-     large le disque fait 150 px, soit les 6 px CSS par LED de l'échelle réelle
-     de l'appareil — la rétrécir viderait le mode « téléphone » de son sens.
-     Seule une colonne plus étroite que 576 px le contraint. */
-  const size = $derived(Math.min(FULL, width));
+  const dev = $derived(frame.device);
 
+  /** Un disque du dos : centré sur ses coordonnées, carré, en % du cadre. */
+  const at = (c: Disc) =>
+    `left:${c.left * 100}%;top:${c.top * 100}%;width:${c.pct * 100}%`;
+
+  const size = $derived(Math.min(FULL, width));
   const narrow = $derived(vw <= NARROW);
   const cap = $derived(Math.floor(vh * SHARE));
 
   /* Le disque seul, lui, se réduit : il n'a pas d'échelle réelle à préserver, et
      le rogner ferait perdre des LEDs — l'inverse du téléphone, dont on ne perd
-     que le dos et le Glyph Button. */
+     que le bas du dos et le Glyph Button. */
   const discSize = $derived(narrow ? Math.min(size, cap) : size);
 
   /* Hauteur gardée en colonne unique. Nulle ailleurs : le CSS ne s'en sert que
      sous le point de rupture. */
   const band = $derived(
-    mode === "phone" ? Math.min(Math.round(size * BAND), cap) : discSize,
+    mode === "phone" ? Math.min(Math.round(size * previewBand(dev)), cap) : discSize,
   );
 
   /* Mode téléphone : la cellule suit le diamètre réellement affiché, pas une
-     valeur figée — sur colonne étroite la trame deviendrait irrégulière. Mode
-     grand : la plus grande cellule entière qui tient dans le cadre, un pas
-     fractionnaire élargirait une colonne sur n. */
+     valeur figée — sur colonne étroite la trame deviendrait irrégulière, et le
+     rapport change d'un appareil à l'autre. Mode grand : la plus grande cellule
+     entière qui tient dans le cadre, un pas fractionnaire élargirait une colonne
+     sur n. */
   const grid = $derived<Grid>(
     mode === "phone"
-      ? screenGrid((size * DISC_PCT) / SIZE, dpr)
-      : screenGrid(Math.max(6, Math.floor(discSize / SIZE)), dpr),
+      ? screenGrid(dev, (size * dev.disc.pct) / dev.size, dpr)
+      : screenGrid(dev, Math.max(6, Math.floor(discSize / dev.size)), dpr),
   );
 
   /* Si la préview ne rentre pas en hauteur, le cadre la rogne **par le bas**
      plutôt que de la réduire ou de rendre la page défilante. Le disque est dans
-     le haut de l'appareil (15,36 %) : ce qu'on perd, c'est le Glyph Button et
-     le bas du dos, décoratifs. D'où l'alignement en haut du cadre — un centrage
-     rognerait des deux côtés et mangerait la matrice. */
+     le haut de l'appareil : ce qu'on perd, c'est le Glyph Button et le bas du
+     dos, décoratifs. D'où l'alignement en haut du cadre — un centrage rognerait
+     des deux côtés et mangerait la matrice. */
   let stageH = $state(0);
-  const naturalH = $derived(mode === "phone" ? (size * 913) / 704 : grid.cssSize);
+  const naturalH = $derived(mode === "phone" ? size / dev.aspect : grid.cssSize);
   /* deux pixels de mou : les deux hauteurs s'égalisent pile quand ça rentre, et
      l'arrondi à l'entier ferait apparaître le fondu sur un cheveu */
   const clipped = $derived(stageH > 0 && naturalH - stageH > 2);
+
+  /* La légende du Glyph Button se range du côté où il reste de la place : le
+     bouton est à droite sur un (3), à gauche sur un (4a) Pro. Ancrée du mauvais
+     côté, elle sortirait du cadre. */
+  const hintRight = $derived(dev.button.left < 0.5);
+  const hintX = $derived(
+    hintRight
+      ? dev.button.left + dev.button.pct / 2 + 0.02
+      : dev.button.left - dev.button.pct / 2 - 0.02,
+  );
 
   $effect(() => {
     if (!cvs) return;
@@ -131,17 +143,28 @@
 </script>
 
 <figure class="device">
-  <div
-    class="stage"
-    class:clipped
-    style="--band:{band}px"
-    bind:clientHeight={stageH}
-  >
+  <div class="stage" class:clipped style="--band:{band}px" bind:clientHeight={stageH}>
     {#if mode === "phone"}
-      <div class="phone" style="width:{size}px">
-        <img src="/phone3-back.webp" alt="Dos d'un Nothing Phone (3)" draggable="false" />
+      <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
+        {#if dev.backdrop.kind === "photo"}
+          <img src={dev.backdrop.src} alt={dev.backdrop.alt} draggable="false" />
+        {:else}
+          {@const b = dev.backdrop}
+          <!-- Schéma, pas photo : filets d'1 px sur corps plein. Il dit où sont
+               les choses sans prétendre montrer l'objet. -->
+          <div class="plate" role="img" aria-label="Schéma du dos d'un {dev.name}">
+            <span
+              class="plateau"
+              style="left:{b.plateau.left * 100}%;top:{b.plateau.top * 100}%;width:{b
+                .plateau.width * 100}%;height:{b.plateau.height * 100}%"
+            ></span>
+            {#each b.lenses as lens, i (i)}
+              <span class="lens" style={at(lens)}></span>
+            {/each}
+          </div>
+        {/if}
 
-        <div class="disc" style="width:{DISC_PCT * 100}%;background:{DISC_BG[style]}">
+        <div class="disc" style="{at(dev.disc)};background:{DISC_BG[style]}">
           <canvas bind:this={cvs}></canvas>
         </div>
 
@@ -149,6 +172,7 @@
           class="glyphbtn"
           class:is-held={held}
           disabled={!compare}
+          style={at(dev.button)}
           aria-label="Glyph Button — maintenir pour comparer avec le rendu sans réglages"
           {...holdHandlers}
         ></button>
@@ -156,7 +180,14 @@
         <!-- pas de légende quand il n'y a rien à comparer : elle promettrait une
              action que le bouton désactivé ne rend pas -->
         {#if compare}
-          <span class="hint" class:on={held}>{held ? "Rendu brut" : "Maintenir"}</span>
+          <span
+            class="hint"
+            class:on={held}
+            class:right={hintRight}
+            style="left:{hintX * 100}%;top:{dev.button.top * 100}%"
+          >
+            {held ? "Rendu brut" : "Maintenir"}
+          </span>
         {/if}
       </div>
     {:else}
@@ -177,7 +208,7 @@
 
   <figcaption>
     <span class="k">LED allumées</span>
-    <span class="v">[{String(frame.lit).padStart(3, "0")} / {LED_COUNT}]</span>
+    <span class="v">[{String(frame.lit).padStart(3, "0")} / {dev.ledCount}]</span>
     <span class="k">Moyenne</span>
     <span class="v">{Math.round(frame.mean * 100)} %</span>
     <span class="k">Échelle</span>
@@ -213,34 +244,66 @@
     overflow: hidden;
   }
 
-  /* Fondu au bord du rognage, seulement quand il y a rognage. Sans lui la
-     photo, qui se termine déjà par un dégradé, se ferait couper net. */
+  /* Fondu au bord du rognage, seulement quand il y a rognage. Sans lui le fond,
+     qui se termine déjà par un dégradé, se ferait couper net. */
   .stage.clipped {
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent 100%);
     mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent 100%);
   }
 
-  /* largeur posée en ligne : la taille de cellule s'en déduit */
+  /* largeur et proportions posées en ligne : la taille de cellule s'en déduit */
   .phone {
     position: relative;
-    aspect-ratio: 704 / 913;
   }
 
-  .phone img {
+  .phone img,
+  .plate {
     position: absolute;
     inset: 0;
+  }
+
+  /* La photo n'a pas de bord franc : elle se termine en fondu, sinon la bande
+     basse se ferait couper net. Un aplat superposé masquerait la trame de fond
+     de page, d'où le masque. Le schéma, lui, a une arête — c'est un plan, il
+     s'arrête. */
+  .phone img {
     width: 100%;
     height: 100%;
     display: block;
+    -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 99%);
+    mask-image: linear-gradient(to bottom, #000 86%, transparent 99%);
     /* hors du hit-test : sinon l'appui long sur le bouton, qui la recouvre,
        ouvre le menu contextuel « enregistrer l'image » de Chrome Android */
     pointer-events: none;
     -webkit-user-drag: none;
     user-select: none;
-    /* fondu plutôt qu'un aplat superposé, sinon la trame de fond de page
-       disparaîtrait sur la bande basse */
-    -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 99%);
-    mask-image: linear-gradient(to bottom, #000 86%, transparent 99%);
+  }
+
+  /* Corps de l'appareil quand on n'a pas de photo. Angles vifs, filets d'1 px,
+     aucune ombre : c'est un plan, il ne mime pas une prise de vue.
+
+     Trois valeurs de gris qui se suffisent : le plateau est plus clair que le
+     corps, le disque plus sombre que les deux — dans les deux styles de LED.
+     C'est ce qui fait lire la matrice comme une fenêtre ronde sans simuler de
+     profondeur. À corps et plateau de même valeur, le disque disparaissait. */
+  .plate {
+    background: #0b0b0d;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    pointer-events: none;
+  }
+
+  .plateau {
+    position: absolute;
+    background: #17171c;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .lens {
+    position: absolute;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.22);
   }
 
   /* la couleur de fond vient du style de LED, posée en inline */
@@ -249,11 +312,9 @@
     overflow: hidden;
   }
 
-  /* largeur posée en ligne depuis DISC_PCT */
+  /* position et diamètre posés en ligne depuis le profil */
   .phone .disc {
     position: absolute;
-    left: 79.53%;
-    top: 15.36%;
     aspect-ratio: 1;
     transform: translate(-50%, -50%);
   }
@@ -269,12 +330,9 @@
     height: 100%;
   }
 
-  /* bouton Glyph, calé sur le bouton physique de la photo */
+  /* bouton Glyph, calé sur le bouton de l'appareil */
   .glyphbtn {
     position: absolute;
-    left: 84.53%;
-    top: 74.82%;
-    width: 15.86%;
     aspect-ratio: 1;
     transform: translate(-50%, -50%);
     border-radius: 50%;
@@ -310,8 +368,6 @@
 
   .hint {
     position: absolute;
-    left: 74.6%;
-    top: 74.82%;
     transform: translate(-100%, -50%);
     white-space: nowrap;
     font-size: 10px;
@@ -321,6 +377,11 @@
        peut pas suivre le thème, elle doit tenir sur du noir dans les deux */
     color: rgba(255, 255, 255, 0.45);
     pointer-events: none;
+  }
+
+  /* bouton à gauche du dos : la légende passe de l'autre côté */
+  .hint.right {
+    transform: translate(0, -50%);
   }
 
   .hint.on {
@@ -383,8 +444,8 @@
     color: var(--ink);
   }
 
-  /* Bande calculée dans le script — voir BAND / SHARE. Le fondu y est plus
-     court : sur une colonne de téléphone, 56 px mordraient sur le bas du
+  /* Bande calculée dans le script — voir previewBand / SHARE. Le fondu y est
+     plus court : sur une colonne de téléphone, 56 px mordraient sur le bas du
      disque. */
   @media (max-width: 980px) {
     .stage {
