@@ -24,6 +24,11 @@ dist-ssr
 # Le dépôt est public, ils n'ont rien à y faire.
 deploy.ps1
 
+# Copies de travail des photos de dos. Elles sont identiques à celles de public/
+# et n'ont rien à faire dans le dépôt — dans public/ elles partaient même dans le
+# build, où elles doublaient la charge d'images pour rien.
+reference/
+
 # Sorties de l'app, si on les enregistre dans le dossier du projet
 glyphcast-*.png
 glyphcast-*.kt
