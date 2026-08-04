@@ -81,9 +81,30 @@ de sa hauteur**.
 | Corps dans le cadre | 98,3 % | 98,3 % |
 | Hublot — diamètre | 28,27 % | 34,66 % |
 | Hublot — centre | 79,69 % / 15,33 % | 68,82 % / 22,67 % |
-| Cerne (`margin`) | 2 LEDs | 1,5 LED |
+| Cerne (`margin`) | 1,5 LED | 1,5 LED |
 | Part de LED dans le pas (`duty`) | 0,72 | 13/16 |
+| Largeur de rendu (`frameWidth`) | 792 px | 739 px |
+| → cellule obtenue | 8 px | 16 px |
+| → LED / écart | 6 / 2 px | 13 / 3 px |
 | Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
+
+#### Une largeur de rendu par appareil
+
+`frameWidth` n'est **pas partagée**. La cellule vaut `disc.pct × frameWidth`
+arrondi à l'entier : avec une largeur commune, ajuster le cerne d'un appareil
+déplaçait la cellule de l'autre, et donc son écart entre LEDs et sa netteté. Les
+deux matrices n'ont ni le même nombre de LEDs, ni le même pas, ni le même
+cerne — elles ne peuvent pas tomber juste à la même largeur, et le constater a
+coûté plusieurs allers-retours.
+
+Chaque valeur est choisie pour que la cellule tombe sur un entier confortable :
+792 px donne au (3) un hublot de 223,9, soit 28 cellules de 8 px ; 739 px donne
+au (4a) Pro un hublot de 256,1, soit 16 cellules de 16 px. Le plus étroit des
+deux dos se centre dans la colonne, qui fait la largeur du plus large.
+
+Le prix est assumé : **les deux dos ne sont plus affichés à la même taille**, on
+ne peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité de
+chacune qui a été retenue.
 
 **Les deux photos ont leur hublot noirci.** C'est une exigence sur l'asset, pas
 une option : la matrice de l'appareil doit avoir été remplie de noir dans
@@ -104,7 +125,10 @@ de taille, alors qu'en largeurs de LED il reste juste partout et le hublot vaut
 simplement `size + 2 × margin` cellules.
 
 Sur le (3), le hublot mesuré est le **verre entier** (199 px, biseau compris) et
-non la seule zone de LEDs (~170 px) : d'où 2 LEDs de cerne. Sur le (4a) Pro, le
+non la seule zone de LEDs (~170 px). Le relevé en suggérait deux largeurs de
+LED, mais à l'écran deux cellules de cerne mangent la matrice — elle rend plus
+petit et moins net que l'appareil, pour un bord qui ne se lit pas mieux ; une
+seule était l'excès inverse, le cerne ne se lisait plus. Sur le (4a) Pro, le
 relevé de la photo d'origine donne un pas de 18,67 px dans un hublot de 300
 (source 2048²), donc un champ de 13 × 18,67 = 242,7 px et un cerne de
 (300 − 242,7)/2 = 28,6 px, soit **1,53 pas** — la consigne n'est pas estimée.
@@ -499,19 +523,12 @@ Deux axes indépendants.
 | Mode | Rendu |
 |---|---|
 | Téléphone | matrice calée sur le hublot de la photo, cerne compris |
-| Grand | hublot seul, sur toute la largeur de la colonne |
+| Grand | hublot seul, **entier**, réduit s'il le faut pour tenir |
 
-Les deux sont larges de `min(728, largeur de colonne)`.
-
-**728 px n'est pas un encombrement, c'est une taille de LED.** À cette largeur
-le hublot du (3) fait 206 px, ce qui laisse **7 px CSS par LED** en gardant ses
-deux largeurs de cerne, et celui du (4a) Pro 252 px, soit **16 px**. À 576 px
-les mêmes contraintes tombaient sur 6 et 13, et à 6 px une LED ne fait plus que
-4 px de côté — elle se lit comme du bruit. Les deux dos étant recadrés à la même
-échelle de corps (§ 2.1), le rapport entre les deux matrices reste juste.
-
-C'est un arbitrage assumé : la préview ne prétend plus rendre l'appareil à sa
-taille physique, elle le rend à la taille où sa matrice se lit.
+Le dos est large de `min(frameWidth de l'appareil, largeur de colonne)` — voir
+§ 2.1, la valeur est choisie par appareil pour ce qu'elle donne comme taille de
+LED, pas pour l'encombrement. La préview ne prétend donc plus rendre l'appareil
+à sa taille physique, elle le rend à la taille où sa matrice se lit.
 
 **Le téléphone n'est jamais réduit pour tenir en hauteur** — le rétrécir
 viderait le mode de son sens. Quand la place manque il est **rogné par le
@@ -519,14 +536,20 @@ bas** : le disque est dans le haut de l'appareil, ce qu'on perd est le bas du
 dos, décoratif. D'où l'alignement en haut du cadre, un centrage rognerait des
 deux côtés et mangerait la matrice.
 
-Le disque seul, lui, **se réduit** plutôt que d'être rogné : il n'a pas
-d'échelle réelle à préserver et le couper ferait perdre des LEDs.
+Le disque seul, lui, **se réduit** plutôt que d'être rogné : il doit rester
+visible en entier, une matrice amputée ne dit plus ce qu'elle contient. Son
+plafond est la hauteur que le cadre a réellement obtenue, déjà comprimée par la
+mise en page quand la place manque ; s'en servir converge en une passe, le
+disque redescend à cette hauteur et le cadre n'a alors plus besoin de comprimer.
+La netteté qu'on y perd est acceptée : les cellules du mode grand sont deux à
+trois fois plus grosses que sur le téléphone, un pixel d'arrondi s'y voit
+beaucoup moins.
 
-Seule une colonne plus étroite que 728 px contraint la largeur, et la cellule
-suit alors le diamètre réellement affiché : une valeur figée donnerait une
-trame irrégulière. La bascule en colonne unique se fait à **1140 px** et non à
-980 : en dessous, 728 px de téléphone, 25,6 de gouttière et les 300 px minimum
-du rack ne tiennent plus côte à côte, marges comprises.
+Une colonne plus étroite que le `frameWidth` de l'appareil contraint la largeur,
+et la cellule suit alors le diamètre réellement affiché : une valeur figée
+donnerait une trame irrégulière. La bascule en colonne unique se fait à
+**1200 px** : en dessous, le plus large des deux dos (792 px), 25,6 de gouttière
+et les 300 px minimum du rack ne tiennent plus côte à côte, marges comprises.
 
 Un fondu de 56 px (28 px en colonne unique) marque le bord du rognage, et
 seulement quand il y a rognage. Les photos se terminent en outre par leur propre
@@ -556,8 +579,8 @@ l'asymétrie d'un demi-pixel décale la trame entière d'autant, ce qui ne se vo
 pas. Sans ça, un (4a) Pro à 16 px de cellule ne pouvait pas avoir ses 3 px
 d'écart : seulement 2 ou 4.
 
-Écarts obtenus aux tailles de référence : **2 px** pour le (3) (cellule 7, LED
-de 5), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
+Écarts obtenus aux tailles de référence : **2 px** pour le (3) (cellule 8, LED
+de 6), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
 
 `sharp` émule l'appareil. `soft` est fait pour un affichage tel quel sur un
 écran : sans halo pour porter l'intensité, un plancher à 0,25 écraserait tout
@@ -586,6 +609,28 @@ Un canvas de taille fixe redimensionné par le navigateur avec un ratio
 fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
 de gap. La taille CSS du canvas est donc dérivée du backing (`size / dpr`),
 ratio exactement 1, et **le canvas n'est jamais étiré**.
+
+#### Le canvas doit tomber sur un pixel entier de l'écran
+
+Un canvas posé à un demi-pixel est rééchantillonné par le navigateur : tout le
+rendu devient flou d'un coup, alors que son contenu est parfaitement net. C'est
+le piège le plus coûteux du composant, parce que ses symptômes n'ont aucun
+rapport avec sa cause.
+
+Il se déclenchait de deux façons, et les deux passaient pour autre chose :
+
+- le canvas était posé en pourcentage avec `translate(-50%)`, donc son centre
+  tombait sur un demi-pixel dès que sa **taille était impaire** ;
+- le dos est centré en flex dans sa colonne, donc son bord gauche tombait sur un
+  demi-pixel dès que la **parité** de la colonne et du dos différait.
+
+La netteté dépendait donc de la parité, et apparaissait ou disparaissait au gré
+des largeurs — sans rapport visible avec ce qu'on venait de changer. Changer la
+marge d'un appareil pouvait rendre l'autre flou.
+
+La position est donc calculée en pixels entiers **de l'écran** : on mesure
+l'origine de la boîte porteuse, on arrondit la position absolue, on repasse en
+coordonnées locales. Ça vaut pour les deux modes.
 
 **Le choix de la cellule se fait sur le cerne, pas sur la taille.** La cellule
 étant entière, le cerne ne prend que des valeurs discrètes ; on retient donc,

@@ -485,7 +485,7 @@
     z-index: 2;
     /* élargie avec la préview : à 1180 px, le rack tombait sous 430 px de large
        et ses libellés de curseur se cassaient en deux lignes */
-    max-width: 1280px;
+    max-width: 1360px;
     margin: 0 auto;
     padding: 0 2.4rem;
     height: 100dvh;
@@ -535,9 +535,10 @@
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    /* 728 px : la largeur qui donne 7 px par LED au (3) et 16 au (4a) Pro —
-       voir FULL dans Preview. */
-    grid-template-columns: minmax(0, 728px) minmax(300px, 1fr);
+    /* 792 px : la largeur du plus large des deux dos. Chaque appareil porte la
+       sienne — voir frameWidth dans devices.ts — et le plus étroit se centre
+       dans la colonne. */
+    grid-template-columns: minmax(0, 792px) minmax(300px, 1fr);
     grid-template-rows: minmax(0, 1fr);
     gap: 1.6rem;
   }
@@ -785,10 +786,10 @@
      redevient défilante et c'est la préview, réduite à la bande qui porte le
      disque, qui s'épingle en haut de l'écran. Régler un curseur sans voir la
      matrice n'aurait aucun intérêt. */
-  /* 1140 px : en dessous, 728 px de téléphone + 25,6 de gouttière + les 300 px
+  /* 1200 px : en dessous, 792 px de téléphone + 25,6 de gouttière + les 300 px
      minimum du rack ne tiennent plus, marges comprises. Voir NARROW dans
      Preview, qui double ce seuil côté script. */
-  @media (max-width: 1140px) {
+  @media (max-width: 1200px) {
     .page {
       height: auto;
       overflow: visible;
@@ -829,3 +830,4 @@
     }
   }
 </style>
+

@@ -4,12 +4,11 @@
 
 <script lang="ts">
   /* Deux échelles pour la même matrice.
-     - « téléphone » : rendue à sa position et à son échelle réelles sur la photo
-       du dos. Positions en pourcentage du cadre, jamais en px — c'est ce qui
-       garde le calage quand la préview est redimensionnée. Tout vient du profil,
-       ce composant ne connaît aucune cote.
-     - « grand » : le disque seul sur toute la largeur de la colonne, pour lire
-       LED par LED ce que fait un réglage.
+     - « téléphone » : la matrice calée sur le hublot de la photo du dos. Le dos
+       est rendu à la largeur que porte le profil — elle est choisie par appareil
+       pour que sa cellule tombe sur un entier confortable, et n'a donc rien à
+       voir d'un appareil à l'autre.
+     - « grand » : le disque seul, réduit s'il le faut pour tenir en entier.
 
      La géométrie n'est jamais passée en propriété : elle est lue dans
      `frame.device`. Une trame et son cadre ne peuvent donc pas se désaccorder
@@ -18,16 +17,6 @@
   import { DEVICES, previewBand, type Disc } from "../devices";
   import type { Frame } from "../pipeline";
   import { DISC_BG, paint, screenGrid, type Grid, type LedStyle } from "../render";
-
-  /* Largeur de référence du cadre. Elle n'est pas choisie pour l'encombrement
-     mais pour ce qu'elle donne comme taille de LED : à 728 px, le hublot du (3)
-     fait 206 px, ce qui laisse **7 px CSS par LED** en gardant les deux
-     largeurs de cerne, et celui du (4a) Pro 252 px, soit 16 px par LED.
-     À 576 px les mêmes contraintes tombaient sur 6 et 13 px, et une LED de
-     4 px de côté se lit comme du bruit — c'est la netteté qui paie, pas la
-     place. Le téléphone n'est jamais réduit pour tenir dans la fenêtre ; seule
-     une colonne plus étroite le contraint. */
-  const FULL = 728;
 
   /* Colonne unique : la préview est épinglée en haut de l'écran et le rack
      défile dessous, pour qu'on voie l'effet d'un curseur pendant qu'on le
@@ -38,10 +27,11 @@
      - NARROW double le point de rupture du CSS. */
   const SHARE = 0.4;
   /* Point de rupture des deux colonnes. Il n'est pas rond : c'est la largeur en
-     dessous de laquelle 728 px de téléphone, 25,6 px de gouttière et les 300 px
-     minimum du rack ne tiennent plus dans la page, marges comprises. Le laisser
-     à 980 faisait déborder la grille sur toute la plage 980 → 1130. */
-  const NARROW = 1140;
+     dessous de laquelle le plus large des deux dos (792 px), 25,6 px de
+     gouttière et les 300 px minimum du rack ne tiennent plus dans la page,
+     marges comprises. Le laisser sous cette valeur fait déborder la grille au
+     lieu de passer en colonne. */
+  const NARROW = 1200;
 
   type Props = {
     frame: Frame;
@@ -56,10 +46,19 @@
   let { frame, mode = "phone", style = "sharp", compare = null, width = 576 }: Props = $props();
 
   let cvs = $state<HTMLCanvasElement>();
+  let phoneEl = $state<HTMLElement>();
   let held = $state(false);
   let dpr = $state(1);
   let vw = $state(1440);
   let vh = $state(900);
+  /* Hauteur réellement obtenue par le cadre de rognage : elle sert de plafond au
+     mode grand et de détecteur de rognage au mode téléphone. */
+  let stageH = $state(0);
+  /* Position du cadre à l'écran, pour recaler le canvas sur la grille de pixels
+     (voir `snap`). Mesurée, jamais déduite : le centrage en flex peut poser le
+     téléphone sur un demi-pixel. */
+  let phoneX = $state(0);
+  let phoneY = $state(0);
 
   onMount(() => {
     const sync = () => {
@@ -85,14 +84,25 @@
   const at = (c: Disc) =>
     `left:${c.left * 100}%;top:${c.top * 100}%;width:${c.pct * 100}%`;
 
-  const size = $derived(Math.min(FULL, width));
+  const size = $derived(Math.min(dev.frameWidth, width));
   const narrow = $derived(vw <= NARROW);
   const cap = $derived(Math.floor(vh * SHARE));
 
-  /* Le disque seul, lui, se réduit : il n'a pas d'échelle réelle à préserver, et
-     le rogner ferait perdre des LEDs — l'inverse du téléphone, dont on ne perd
-     que le bas du dos et le Glyph Button. */
-  const discSize = $derived(narrow ? Math.min(size, cap) : size);
+  /* Le disque seul **doit tenir en entier**, quitte à réduire : le rogner ferait
+     perdre des LEDs, et une matrice amputée ne dit plus ce qu'elle contient.
+     C'est l'inverse du téléphone, dont on ne perd que le bas du dos.
+
+     `stageH` est la hauteur que le cadre a réellement obtenue, déjà comprimée
+     par la mise en page quand la place manque. S'en servir comme plafond
+     converge en une passe : le disque redescend à cette hauteur, le cadre n'a
+     alors plus besoin de comprimer, et les deux se stabilisent.
+
+     La perte de netteté que ça coûte est acceptée ici — les cellules du mode
+     grand sont trois à six fois plus grosses que sur le téléphone, un pixel
+     d'arrondi s'y voit beaucoup moins. */
+  const discSize = $derived(
+    Math.min(width, narrow ? cap : Infinity, stageH > 0 ? stageH : Infinity),
+  );
 
   /* Hauteur gardée en colonne unique. Nulle ailleurs : le CSS ne s'en sert que
      sous le point de rupture. */
@@ -113,7 +123,6 @@
      le haut de l'appareil : ce qu'on perd, c'est le Glyph Button et le bas du
      dos, décoratifs. D'où l'alignement en haut du cadre — un centrage rognerait
      des deux côtés et mangerait la matrice. */
-  let stageH = $state(0);
   const naturalH = $derived(mode === "phone" ? size / dev.aspect : grid.discCss);
   /* deux pixels de mou : les deux hauteurs s'égalisent pile quand ça rentre, et
      l'arrondi à l'entier ferait apparaître le fondu sur un cheveu */
@@ -123,6 +132,54 @@
      un l'a à droite du dos. La cote vient du profil et non du CSS ; le jour où
      l'un le porte à gauche, ça se règle ici. */
   const hintX = $derived(dev.button ? dev.button.left - dev.button.pct / 2 - 0.02 : 0);
+
+  /* Position à l'écran de la boîte qui porte le canvas — le dos en mode
+     téléphone, le disque en mode grand. Relue à chaque changement de taille ou
+     de mode : sans elle, impossible de savoir si le canvas tombe sur un pixel
+     entier. */
+  $effect(() => {
+    void size;
+    void mode;
+    void vw;
+    void vh;
+    void grid;
+    if (!phoneEl) return;
+    const r = phoneEl.getBoundingClientRect();
+    phoneX = r.left;
+    phoneY = r.top;
+  });
+
+  /**
+   * Cale une coordonnée du canvas sur la grille de pixels de **l'écran**, pas
+   * sur celle de son parent.
+   *
+   * Un canvas posé à un demi-pixel est rééchantillonné par le navigateur, et
+   * tout le rendu devient flou d'un coup — alors que son contenu, lui, est
+   * parfaitement net. Le piège est vicieux : la netteté dépendait de la parité
+   * de la taille du canvas et du centrage du téléphone, donc elle apparaissait
+   * et disparaissait au gré des largeurs, sans rapport visible avec ce qu'on
+   * venait de changer.
+   *
+   * On arrondit donc la position **écran** et on repasse en coordonnées locales.
+   */
+  const snap = (local: number, origine: number) => Math.round(local + origine) - origine;
+
+  const frameH = $derived(size / dev.aspect);
+  /* En mode téléphone le canvas se cale sur le hublot de la photo ; en mode
+     grand il se centre dans le disque dessiné. Dans les deux cas la position
+     finale est un entier écran — le mode grand pardonne un peu plus, ses
+     cellules étant deux à trois fois plus grosses, mais un demi-pixel s'y voit
+     quand même. */
+  const matrixX = $derived(
+    mode === "phone"
+      ? snap(dev.disc.left * size - grid.cssSize / 2, phoneX)
+      : snap((grid.discCss - grid.cssSize) / 2, phoneX),
+  );
+  const matrixY = $derived(
+    mode === "phone"
+      ? snap(dev.disc.top * frameH - grid.cssSize / 2, phoneY)
+      : snap((grid.discCss - grid.cssSize) / 2, phoneY),
+  );
 
   $effect(() => {
     if (!cvs) return;
@@ -152,7 +209,11 @@
 <figure class="device">
   <div class="stage" class:clipped style="--band:{band}px" bind:clientHeight={stageH}>
     {#if mode === "phone"}
-      <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
+      <div
+        bind:this={phoneEl}
+        class="phone"
+        style="width:{size}px;aspect-ratio:{dev.aspect}"
+      >
         <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
         <!-- Le hublot de la photo est noirci : il n'y a rien à masquer, donc
@@ -162,8 +223,7 @@
         <canvas
           bind:this={cvs}
           class="matrix"
-          style="left:{dev.disc.left * 100}%;top:{dev.disc.top *
-            100}%;width:{grid.cssSize}px;height:{grid.cssSize}px"
+          style="left:{matrixX}px;top:{matrixY}px;width:{grid.cssSize}px;height:{grid.cssSize}px"
         ></canvas>
 
         {#if dev.button}
@@ -190,12 +250,17 @@
         {/if}
       </div>
     {:else}
-      <!-- le disque, cerne compris : le canvas ne porte que les LEDs -->
+      <!-- le disque, cerne compris : le canvas ne porte que les LEDs, et il y
+           est posé en pixels entiers comme sur le dos -->
       <div
+        bind:this={phoneEl}
         class="disc big"
         style="width:{grid.discCss}px;height:{grid.discCss}px;background:{DISC_BG[style]}"
       >
-        <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
+        <canvas
+          bind:this={cvs}
+          class="matrix"
+          style="left:{matrixX}px;top:{matrixY}px;width:{grid.cssSize}px;height:{grid.cssSize}px"
         ></canvas>
       </div>
     {/if}
@@ -278,15 +343,17 @@
     user-select: none;
   }
 
-  /* Mode téléphone : le canvas seul, calé sur le centre du hublot. Aucun
-     conteneur, donc aucun cercle qui pourrait rogner une LED — le masque de la
-     matrice teste le centre des cellules, si bien que les LEDs des rangées
-     extrêmes débordent du rayon nominal et se faisaient trancher par le
-     découpage circulaire d'avant. */
+  /* Mode téléphone : le canvas seul, calé sur le hublot. Aucun conteneur, donc
+     aucun cercle qui pourrait rogner une LED — le masque de la matrice teste le
+     centre des cellules, si bien que les LEDs des rangées extrêmes débordent du
+     rayon nominal et se faisaient trancher par le découpage circulaire d'avant.
+
+     Position posée en pixels entiers depuis le script (voir `snap`), et non en
+     pourcentage avec un `translate(-50%)` : le centre tombait alors sur un
+     demi-pixel une fois sur deux, et le canvas entier partait au flou. */
   .matrix {
     position: absolute;
     display: block;
-    transform: translate(-50%, -50%);
   }
 
   /* Mode grand : là il n'y a pas de photo, le disque doit donc être dessiné.
@@ -295,10 +362,8 @@
      donc rarement le diamètre exact du hublot, et l'étirer redonnerait la trame
      irrégulière que le calcul en pixels entiers évite. */
   .disc {
+    position: relative;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .disc.big {
@@ -424,10 +489,12 @@
   /* Bande calculée dans le script — voir previewBand / SHARE. Le fondu y est
      plus court : sur une colonne de téléphone, 56 px mordraient sur le bas du
      disque. */
-  @media (max-width: 1140px) {
+  @media (max-width: 1200px) {
     .stage {
       --fade: 28px;
       max-height: var(--band);
     }
   }
 </style>
+
+

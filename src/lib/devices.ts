@@ -33,6 +33,20 @@ export type Device = Geometry & {
   /** largeur / hauteur du cadre de préview. */
   aspect: number;
   /**
+   * Largeur à laquelle le dos est rendu, en px CSS.
+   *
+   * **Par appareil et non partagée.** La cellule vaut `disc.pct × frameWidth`
+   * arrondi à l'entier : une largeur commune faisait qu'ajuster le cerne d'un
+   * appareil déplaçait la cellule de l'autre, et donc son écart entre LEDs et sa
+   * netteté. Les deux matrices n'ont ni le même nombre de LEDs, ni le même pas,
+   * ni le même cerne — elles ne peuvent pas tomber juste à la même largeur.
+   *
+   * Le prix est assumé : les deux dos ne sont plus affichés à la même taille, on
+   * ne peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité
+   * de chacune qui a été retenue.
+   */
+  frameWidth: number;
+  /**
    * Photo du dos, **hublot noirci**. C'est une exigence sur l'asset et non une
    * option : la matrice de l'appareil doit avoir été remplie de noir dans
    * l'image. Il n'y a alors rien à masquer, aucun aplat à poser, et c'est le
@@ -76,6 +90,9 @@ const PHONE3: Device = {
   name: "Nothing Phone (3)",
   ref: "(3)",
   aspect: 704 / 913,
+  // 792 px → hublot de 223,9, soit 28 cellules de 8 px : 25 LEDs et une LED et
+  // demie de cerne de chaque côté. La LED y fait 6 px de côté.
+  frameWidth: 792,
   photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)" },
   /* Relevé sur la photo au hublot noirci : disque de 199 px centré en
      (561 ; 140) dans un cadre de 704 × 913. C'est le **verre entier**, biseau
@@ -83,9 +100,11 @@ const PHONE3: Device = {
      (183,3 px) — d'où un diamètre plus grand et une consigne de cerne plus
      large pour le même rendu. */
   disc: { left: 0.7969, top: 0.1533, pct: 0.2827 },
-  // champ de LEDs de ~170 px dans un verre de 199 : 14,5 px de cerne pour une
-  // cellule de 6,8, soit deux largeurs de LED
-  margin: 2,
+  /* Une LED et demie. Le relevé du verre entier en suggérait deux, mais à
+     l'écran deux cellules de cerne mangent la matrice — elle rend plus petit et
+     moins net que l'appareil, pour un bord qui ne se lit pas mieux. Une seule
+     était l'excès inverse : le cerne ne se lisait plus. */
+  margin: 1.5,
   // pas mesurable sur la photo, le hublot n'y montre aucune LED. Estimé un cran
   // plus serré que les deux tiers d'avant, qui creusaient trop les écarts.
   duty: 0.72,
@@ -110,6 +129,9 @@ const PHONE4A_PRO: Device = {
   name: "Nothing Phone (4a) Pro",
   ref: "(4a) Pro",
   aspect: 704 / 913,
+  // 739 px → hublot de 256,1, soit 16 cellules de 16 px : 13 LEDs et une LED et
+  // demie de cerne. La LED y fait 13 px de côté pour 3 d'écart.
+  frameWidth: 739,
   photo: { src: "/phone4apro-back.webp", alt: "Dos d'un Nothing Phone (4a) Pro" },
   // relevé sur la photo au hublot noirci : disque de 244 px centré en (484,5 ; 207)
   disc: { left: 0.6882, top: 0.2267, pct: 0.3466 },

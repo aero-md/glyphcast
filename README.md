@@ -43,8 +43,8 @@ Le détail fonctionnel — formules, bornes, invariants, schéma JSON — est da
 - **Comparer avant / après** en maintenant le Glyph Button — ou le bouton en
   barre sous la préview quand l'appareil n'en a pas, comme le (4a) Pro : même
   cadrage, tonalité au repos.
-- **Prévisualiser** à deux échelles (sur le dos du téléphone à taille réelle,
-  ou disque plein cadre) et dans deux styles de LED (`sharp` / `soft`).
+- **Prévisualiser** à deux échelles (sur le dos du téléphone, ou disque plein
+  cadre) et dans deux styles de LED (`sharp` / `soft`).
 - **Exporter** en PNG, en `IntArray` Kotlin prêt à coller dans un Glyph Toy,
   ou en JSON rechargeable.
 
@@ -71,7 +71,7 @@ seul pipeline.
 | Grille | 25 × 25 = 625 cellules | 13 × 13 = 169 cellules |
 | Masque | disque (12, 12), r = 12,5 | disque (6, 6), r = 6,5 |
 | LEDs pilotables | **489** | **137** |
-| Cerne au bord du hublot | 2 LEDs | 1,5 LED |
+| Cerne au bord du hublot | 1,5 LED | 1,5 LED |
 | Part de LED dans le pas | 0,72 | 0,81 |
 | Diamètre du disque | 26,49 % de la largeur du corps | 35,62 % — 34 % de plus |
 | Glyph Button | oui | **non** |
@@ -94,10 +94,10 @@ qui garde le calage quand la préview est redimensionnée.
 ### Le même gabarit pour les deux dos
 
 Les deux photos sont recadrées au **même format et à la même échelle de corps** —
-704 × 913, corps à 98,3 % de la largeur du cadre. Pas de la symétrie décorative :
-les deux appareils sont alors montrés à la même taille
-physique, et c'est la seule condition pour que comparer les deux matrices veuille
-dire quelque chose. Un dos rendu 10 % plus gros gonflerait sa matrice d'autant.
+704 × 913, corps à 98,3 % de la largeur du cadre. Ça garde les cotes
+comparables d'un profil à l'autre et le recadrage déductible. En revanche les
+deux dos ne sont pas **affichés** à la même taille : chacun a sa largeur de
+rendu, choisie pour sa propre taille de LED.
 
 Le recadrage du (4a) Pro se déduit donc de la photo du (3), et retombe sur le
 même 704 × 913 au millième d'aspect près.
@@ -174,35 +174,48 @@ Deux échelles, au choix :
 - **Téléphone** — la matrice calée sur le hublot de la photo du dos, cerne
   compris. Maintenir le Glyph Button compare avec le même cadrage et la tonalité
   au repos.
-- **Grand** — le hublot seul sur toute la largeur de la colonne, pour lire LED
-  par LED ce que fait un curseur.
+- **Grand** — le hublot seul, **entier**, réduit s'il le faut pour tenir en
+  hauteur. Une matrice amputée ne dit plus ce qu'elle contient.
 
-Le téléphone est rendu à **728 px** de large. Ce n'est pas un encombrement,
-c'est une taille de LED : à cette largeur le hublot du (3) fait 206 px, soit
-7 px CSS par LED en gardant ses deux largeurs de cerne, et celui du (4a) Pro
-252 px, soit 16 px. À 576 px les mêmes contraintes tombaient sur 6 et 13, et à
-6 px une LED ne fait plus que 4 px de côté — elle se lit comme du bruit. La
-préview ne prétend donc plus rendre l'appareil à sa taille physique, mais à
-celle où sa matrice se lit ; les deux dos étant recadrés à la même échelle de
-corps, le rapport entre les deux matrices reste juste.
+**Chaque appareil a sa propre largeur de rendu** : 792 px pour le (3), 739 pour
+le (4a) Pro. Ce n'est pas un encombrement, c'est une taille de LED — à ces
+largeurs les hublots font 224 et 256 px, soit exactement 28 cellules de 8 px et
+16 cellules de 16 px. Une largeur commune ne peut pas convenir aux deux : la
+cellule est entière, et régler le cerne de l'un déplaçait celle de l'autre.
 
-Il n'est jamais réduit pour tenir dans la fenêtre. Quand la place manque il est
-rogné par le bas : le hublot est en haut de l'appareil, ce qu'on perd c'est le
-bas du dos. La hauteur gardée se déduit du bas du hublot, elle n'est pas posée
+Le prix est assumé : les deux dos ne sont plus affichés à la même taille, on ne
+peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité de
+chacune qui a été retenue.
+
+Le dos n'est jamais réduit pour tenir dans la fenêtre. Quand la place manque il
+est rogné par le bas : le hublot est en haut de l'appareil, ce qu'on perd c'est
+le bas du dos. La hauteur gardée se déduit du bas du hublot, elle n'est pas posée
 en dur — une constante partagée aurait décapité la matrice du (4a) Pro, plus
 large et plus basse.
 
 Dans les deux cas une cellule occupe un nombre **entier** de pixels de canvas :
 un canvas redimensionné par le navigateur avec un ratio fractionnaire donne
 une trame irrégulière, une colonne sur n gagne un pixel de gap. La grille est
-donc calculée depuis le `devicePixelRatio`, et le canvas centré dans le hublot
-plutôt qu'étiré à 100 %.
+donc calculée depuis le `devicePixelRatio`, et le canvas n'est jamais étiré.
+
+### Le piège du demi-pixel
+
+Un canvas posé à un demi-pixel est rééchantillonné par le navigateur : tout le
+rendu devient flou d'un coup, alors que son contenu est parfaitement net. C'est
+le piège le plus coûteux du composant, parce que ses symptômes n'ont aucun
+rapport avec sa cause — la netteté dépendait de la **parité** de la taille du
+canvas et du centrage du dos, donc elle apparaissait et disparaissait au gré des
+largeurs. Changer la marge d'un appareil pouvait rendre l'autre flou.
+
+La position du canvas est donc calculée en pixels entiers **de l'écran** : on
+mesure l'origine de la boîte porteuse, on arrondit la position absolue, on
+repasse en coordonnées locales.
 
 ### Le cerne
 
 Aucune des deux matrices ne va jusqu'au bord de son hublot : il reste une bande
-sombre entre la découpe et la première LED, relevée sur les photos à 2 largeurs
-de LED sur le (3) et 1,5 sur le (4a) Pro. C'est l'unité qui compte — en pixels
+sombre entre la découpe et la première LED, relevée sur les photos à 1,5 largeur
+de LED sur les deux. C'est l'unité qui compte — en pixels
 d'écran, le cerne mentirait dès que la préview change de taille.
 
 La cellule étant entière, le cerne ne prend que des valeurs discrètes : on
@@ -214,8 +227,8 @@ d'une demi-LED.
 Il vient du profil et pas d'une constante partagée : les LEDs d'un (4a) Pro sont
 bien plus jointives que celles d'un (3), et les traiter pareil les rendait deux
 fois trop petites — un rendu qui *paraissait* flou alors qu'il était net au
-pixel. Aux tailles de référence : **2 px** d'écart pour le (3) (cellule 7, LED
-de 5), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
+pixel. Aux tailles de référence : **2 px** d'écart pour le (3) (cellule 8, LED
+de 6), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
 
 L'écart ne dépend pas du style de rendu. Il décrit l'appareil, pas la façon de
 le regarder ; `sharp` et `soft` se distinguent par les angles, le halo et la
@@ -357,3 +370,5 @@ src/lib/ui/             Preview, Slider, Seg, Card, Wordmark, ThemeToggle
 src/App.svelte          rack de réglages et mise en page
 public/phone3-back.webp photo du dos, partagée avec glyphlapse / glyphslot
 ```
+
+
