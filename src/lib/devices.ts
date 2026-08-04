@@ -32,7 +32,19 @@ export type Device = Geometry & {
   ref: string;
   /** largeur / hauteur du cadre de préview. */
   aspect: number;
-  photo: { src: string; alt: string };
+  photo: {
+    src: string;
+    alt: string;
+    /**
+     * Le hublot est déjà noirci dans la photo — aucune matrice d'origine à
+     * masquer, donc aucun aplat à poser. C'est le fond de la photo qui sert de
+     * fond, biseau et reflets compris.
+     *
+     * À `false`, la photo montre encore la matrice de l'appareil et il faut la
+     * recouvrir d'un disque sombre avant d'y peindre la nôtre.
+     */
+    filled: boolean;
+  };
   disc: Disc;
   /**
    * Cerne entre la découpe de la matrice et la LED la plus proche, **en
@@ -60,11 +72,16 @@ const PHONE3: Device = {
   name: "Nothing Phone (3)",
   ref: "(3)",
   aspect: 704 / 913,
-  photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)" },
-  disc: { left: 0.7953, top: 0.1536, pct: 0.2604 },
-  // relevé sur la photo : première LED à ~6,8 px d'un hublot de 183,3 px, soit
-  // une largeur de LED tout juste
-  margin: 1,
+  photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)", filled: true },
+  /* Relevé sur la photo au hublot noirci : disque de 198 px centré en
+     (560,5 ; 140) dans un cadre de 704 × 913. C'est le **verre entier**, biseau
+     compris, et non la seule zone de LEDs que mesurait le relevé précédent
+     (183,3 px) — d'où un diamètre plus grand et une consigne de cerne plus
+     large pour le même rendu. */
+  disc: { left: 0.7962, top: 0.1533, pct: 0.2813 },
+  // champ de LEDs de ~170 px dans un verre de 198 : 14 px de cerne pour une
+  // cellule de 6,8, soit deux largeurs de LED
+  margin: 2,
   button: { left: 0.8453, top: 0.7482, pct: 0.1586 },
 };
 
@@ -86,7 +103,14 @@ const PHONE4A_PRO: Device = {
   name: "Nothing Phone (4a) Pro",
   ref: "(4a) Pro",
   aspect: 704 / 913,
-  photo: { src: "/phone4apro-back.webp", alt: "Dos d'un Nothing Phone (4a) Pro" },
+  // `filled: false` tant que la photo montre encore la matrice de l'appareil :
+  // il faut la recouvrir. À basculer dès que le hublot y sera noirci comme sur
+  // celle du (3), et les cotes ci-dessous seront à relever à nouveau.
+  photo: {
+    src: "/phone4apro-back.webp",
+    alt: "Dos d'un Nothing Phone (4a) Pro",
+    filled: false,
+  },
   disc: { left: 0.6867, top: 0.2267, pct: 0.3501 },
   // relevé sur la photo : première LED à ~24 px d'un hublot de 246,5 px
   margin: 1.5,

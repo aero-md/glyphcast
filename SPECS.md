@@ -79,9 +79,10 @@ de sa hauteur**.
 | Photo | `phone3-back.webp` | `phone4apro-back.webp` |
 | Cadre | 704 × 913 | 704 × 913 |
 | Corps dans le cadre | 98,3 % | 98,3 % |
-| Hublot — diamètre | 26,04 % | 35,01 % |
-| Hublot — centre | 79,53 % / 15,36 % | 68,67 % / 22,67 % |
-| Cerne (`margin`) | 1 LED | 1,5 LED |
+| Hublot — diamètre | 28,13 % | 35,01 % |
+| Hublot — centre | 79,62 % / 15,33 % | 68,67 % / 22,67 % |
+| Cerne (`margin`) | 2 LEDs | 1,5 LED |
+| Hublot noirci (`photo.filled`) | oui | pas encore |
 | Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
 
 Le **cerne** est la bande sombre entre la découpe du hublot et la LED la plus
@@ -91,8 +92,25 @@ grille qui touche sa découpe — ce qu'aucun appareil ne fait. Il est exprimé 
 de taille, alors qu'en largeurs de LED il reste juste partout et le hublot vaut
 simplement `size + 2 × margin` cellules.
 
-Les deux valeurs sont relevées sur les photos : première LED à ~6,8 px d'un
-hublot de 183,3 px sur le (3), à ~24 px d'un hublot de 246,5 px sur le (4a) Pro.
+Les deux valeurs sont relevées sur les photos. Sur le (3), le hublot mesuré est
+le **verre entier** (198 px, biseau compris) et non la seule zone de LEDs
+(~170 px) : d'où 2 LEDs de cerne. Sur le (4a) Pro, première LED à ~24 px d'un
+hublot de 246,5 px, soit 1,5.
+
+#### Photos au hublot noirci
+
+`photo.filled` dit si la photo montre encore la matrice de l'appareil.
+
+À `true` — cas du (3) — le hublot a été rempli de noir dans l'image : il n'y a
+plus rien à masquer, aucun aplat n'est posé, et c'est le fond de la photo qui
+sert de fond, biseau et reflets compris. C'est la forme la plus simple et la
+plus fidèle : un seul élément dessiné, le canvas.
+
+À `false` — cas du (4a) Pro pour l'instant — la photo montre encore ses LEDs et
+il faut les recouvrir avant d'y peindre les nôtres, d'où l'aplat décrit plus
+bas. Basculer le drapeau demande de **relever à nouveau les cotes** : noircir un
+hublot en change le diamètre mesurable, sur le (3) il est passé de 183,3 à
+198 px.
 
 #### Le même gabarit pour les deux
 
@@ -552,23 +570,23 @@ qu'aucune LED ne s'y fait rogner.
 est petite. Sur les largeurs de colonne utiles (300 → 576 px), cerne médian
 obtenu :
 
-| | consigne | dpr 1 | dpr 2 | dpr 3 |
-|---|---:|---:|---:|---:|
-| Phone (3) | 1 | 2,00 | 1,21 | 1,02 |
-| Phone (4a) Pro | 1,5 | 1,47 | 1,50 | 1,50 |
-
 Le (4a) Pro tombe juste partout : 13 LEDs dans un hublot large, la cellule est
-grosse et le pas fin. Le (3) n'y arrive qu'à partir de dpr 2 — à 576 px et
-dpr 1, ses 25 LEDs tiennent dans 150 px, soit 5 px chacune, et le cerne ne peut
-alors valoir que 2,5 LEDs ou zéro. Il n'y a pas de 1 à cette résolution ; le
-plancher fait retenir 2,5.
+grosse et le pas fin. Le (3) est plus contraint — à 576 px et dpr 1 son hublot
+fait 162 px pour 25 LEDs, la cellule ne peut valoir que 5 ou 6 px, et le cerne
+que 3,7 ou 1 LED. La consigne de 2 fait retenir 6, ce qui **prime la netteté** :
+à 6 px la LED fait 4 px de côté pour 2 de gap, à 5 elle tombe à 3 pour 2 et le
+rendu se brouille. Une matrice un peu trop grande se voit moins qu'une matrice
+molle.
 
 #### L'aplat qui masque la photo
 
-En mode téléphone, le fond sombre du disque ne fait **pas** le diamètre du
-hublot. Il ne couvre que le champ de LEDs : le cerne de la photo porte le biseau
-du verre et ses reflets, et l'aplatir sous du noir uni supprimait le seul détail
-qui donne au rendu l'air d'être posé sur l'appareil plutôt que collé dessus.
+Seulement pour une photo à `filled: false`, dont le hublot montre encore la
+matrice de l'appareil.
+
+Le fond sombre ne fait alors **pas** le diamètre du hublot. Il ne couvre que le
+champ de LEDs : le cerne de la photo porte le biseau du verre et ses reflets, et
+l'aplatir sous du noir uni supprimait le seul détail qui donne au rendu l'air
+d'être posé sur l'appareil plutôt que collé dessus.
 
 Son diamètre est le plus grand de deux exigences, plafonné au hublot :
 

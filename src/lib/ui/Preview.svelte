@@ -147,14 +147,16 @@
       <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
         <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
-        <!-- L'aplat ne fait pas le diamètre du hublot mais celui du champ de
-             LEDs : il masque la matrice de la photo et rien de plus. Le cerne
-             visible autour est celui de la photo, biseau et reflets compris. -->
+        <!-- Quand la photo a déjà son hublot noirci, il n'y a rien à masquer :
+             le conteneur ne sert plus qu'à centrer le canvas, et c'est le fond
+             de la photo — biseau et reflets compris — qui fait le fond.
+             Sinon l'aplat couvre le champ de LEDs de la photo, et lui seul. -->
         <div
           class="disc"
-          style="left:{dev.disc.left * 100}%;top:{dev.disc.top * 100}%;width:{grid.fieldCss}px;height:{grid.fieldCss}px;background:{DISC_BG[
-            style
-          ]}"
+          style="left:{dev.disc.left * 100}%;top:{dev.disc.top * 100}%;width:{grid.fieldCss}px;height:{grid.fieldCss}px;background:{dev
+            .photo.filled
+            ? 'transparent'
+            : DISC_BG[style]}"
         >
           <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
           ></canvas>
