@@ -22,19 +22,10 @@ export type Grid = {
   size: number;
   /** Côté correspondant en pixels CSS — ratio backing/CSS exactement 1. */
   cssSize: number;
-  /** Diamètre du disque, cerne compris, en pixels de backing. */
+  /** Diamètre du hublot, cerne compris, en pixels de backing. */
   disc: number;
   /** Le même en pixels CSS. */
   discCss: number;
-  /**
-   * Diamètre, en px CSS, de l'aplat qui masque la matrice de la photo.
-   *
-   * Il couvre le **champ de LEDs** et lui seul, pas tout le hublot : le cerne de
-   * la photo porte le biseau du verre et ses reflets, et l'aplatir sous du noir
-   * uni supprimait le seul détail qui donne au rendu l'air d'être posé sur
-   * l'appareil plutôt que collé dessus.
-   */
-  fieldCss: number;
 };
 
 /**
@@ -74,27 +65,10 @@ function cellFor(d: Device, discPx: number): number {
   return ecart(haut) < ecart(bas) ? haut : bas;
 }
 
-function grid(d: Device, cell: number, dpr: number, discPx = 0): Grid {
+function grid(d: Device, cell: number, dpr: number): Grid {
   const size = d.size * cell;
   const disc = (d.size + 2 * d.margin) * cell;
-
-  /* Le champ de LEDs de la photo, à la cote **idéale** et non quantifiée : c'est
-     lui qu'on masque, et il ne doit pas bouger avec l'arrondi de la cellule.
-     Deux pixels de mou pour couvrir la dernière rangée de la photo à coup sûr. */
-  const champ = discPx ? (discPx * d.size) / (d.size + 2 * d.margin) + 2 * dpr : disc;
-
-  /* Enveloppe : le plus petit disque qui contient vraiment toutes les LEDs,
-     coins compris. Le masque teste le centre des cellules, donc la LED la plus
-     excentrée déborde du rayon nominal — d'où `maxDist` et la demi-diagonale
-     d'une cellule. L'aplat ne descend jamais en dessous, sinon il laisse
-     transparaître les LEDs de la photo entre les nôtres. */
-  const enveloppe = 2 * (d.maxDist + Math.SQRT1_2) * cell;
-
-  // ...mais jamais au-delà du hublot : le déborder reviendrait à recouvrir le
-  // biseau de la photo, ce que tout ce calcul cherche justement à éviter.
-  const field = Math.min(discPx || disc, Math.max(champ, enveloppe));
-
-  return { cell, size, cssSize: size / dpr, disc, discCss: disc / dpr, fieldCss: field / dpr };
+  return { cell, size, cssSize: size / dpr, disc, discCss: disc / dpr };
 }
 
 /**
@@ -107,8 +81,7 @@ export function screenGrid(
   discCss: number,
   dpr = window.devicePixelRatio || 1,
 ): Grid {
-  const discPx = discCss * dpr;
-  return grid(d, cellFor(d, discPx), dpr, discPx);
+  return grid(d, cellFor(d, discCss * dpr), dpr);
 }
 
 /**
@@ -147,13 +120,28 @@ export const DISC_BG: Record<LedStyle, string> = { sharp: "#08080a", soft: "#131
 const OFF: Record<LedStyle, string> = { sharp: "#1b1b20", soft: "#08080a" };
 
 /**
- * Côté de la LED et marge, par style. Le gap est forcé pair pour que la marge
- * reste entière : une demi-marge rendrait un bord flou à chaque cellule.
+ * Côté de la LED et marge dans sa cellule.
+ *
+ * L'écart entre deux LEDs vient du profil (`duty`, la part du pas occupée par
+ * la LED) et non d'une constante partagée : le (4a) Pro a des LEDs bien plus
+ * jointives que le (3), et les traiter pareil les rendait deux fois trop
+ * petites.
+ *
+ * Le style n'entre pas dans le calcul. L'écart décrit l'appareil, pas la façon
+ * de le regarder : le creuser en `soft` revenait à dire que ses LEDs sont plus
+ * espacées quand on change de rendu. Ce qui distingue `soft`, ce sont les angles
+ * adoucis, l'absence de halo et la rampe alpha — pas la géométrie.
  */
-export function ledMetrics(cell: number, style: LedStyle): { led: number; pad: number } {
-  const gapHalf = Math.max(1, Math.round(cell * (style === "soft" ? 0.14 : 0.167)));
-  const led = Math.max(2, cell - 2 * gapHalf);
-  return { led, pad: (cell - led) / 2 };
+export function ledMetrics(cell: number, duty: number): { led: number; pad: number } {
+  const gap = Math.max(1, Math.round(cell * (1 - duty)));
+  const led = Math.max(2, cell - gap);
+  /* Marge **plancher** et non moitié exacte : c'est ce qui autorise un écart
+     impair. Centrer la LED dans sa cellule imposerait une marge à la demie et
+     donc un bord flou à chaque cellule, ce qui bornait l'écart aux valeurs
+     paires — impossible d'obtenir les 3 px que demande un (4a) Pro à 16 px de
+     cellule. Décentrer d'un demi-pixel décale la trame entière d'autant, ce qui
+     ne se voit pas ; un bord anticrénelé, si. */
+  return { led, pad: Math.floor((cell - led) / 2) };
 }
 
 export function paint(
@@ -163,8 +151,8 @@ export function paint(
   opts: PaintOpts = {},
 ): void {
   const { style = "sharp", background = null } = opts;
-  const { size, inside } = frame.device;
-  const { led, pad } = ledMetrics(g.cell, style);
+  const { size, inside, duty } = frame.device;
+  const { led, pad } = ledMetrics(g.cell, duty);
   const radius = style === "soft" ? led * 0.24 : 0;
   const rounded = radius > 0.5 && typeof ctx.roundRect === "function";
 

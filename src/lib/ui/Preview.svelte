@@ -19,11 +19,15 @@
   import type { Frame } from "../pipeline";
   import { DISC_BG, paint, screenGrid, type Grid, type LedStyle } from "../render";
 
-  /* Largeur de référence du cadre. Le téléphone n'est jamais réduit pour tenir
-     dans la fenêtre : à 576 px de large, la matrice d'un Phone (3) fait 150 px,
-     soit 6 px CSS par LED — son échelle réelle. La rétrécir viderait le mode
-     « téléphone » de son sens. Seule une colonne plus étroite le contraint. */
-  const FULL = 576;
+  /* Largeur de référence du cadre. Elle n'est pas choisie pour l'encombrement
+     mais pour ce qu'elle donne comme taille de LED : à 728 px, le hublot du (3)
+     fait 206 px, ce qui laisse **7 px CSS par LED** en gardant les deux
+     largeurs de cerne, et celui du (4a) Pro 252 px, soit 16 px par LED.
+     À 576 px les mêmes contraintes tombaient sur 6 et 13 px, et une LED de
+     4 px de côté se lit comme du bruit — c'est la netteté qui paie, pas la
+     place. Le téléphone n'est jamais réduit pour tenir dans la fenêtre ; seule
+     une colonne plus étroite le contraint. */
+  const FULL = 728;
 
   /* Colonne unique : la préview est épinglée en haut de l'écran et le rack
      défile dessous, pour qu'on voie l'effet d'un curseur pendant qu'on le
@@ -33,7 +37,11 @@
        un écran court ne laisserait rien au rack.
      - NARROW double le point de rupture du CSS. */
   const SHARE = 0.4;
-  const NARROW = 980;
+  /* Point de rupture des deux colonnes. Il n'est pas rond : c'est la largeur en
+     dessous de laquelle 728 px de téléphone, 25,6 px de gouttière et les 300 px
+     minimum du rack ne tiennent plus dans la page, marges comprises. Le laisser
+     à 980 faisait déborder la grille sur toute la plage 980 → 1130. */
+  const NARROW = 1140;
 
   type Props = {
     frame: Frame;
@@ -147,20 +155,16 @@
       <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
         <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
-        <!-- Quand la photo a déjà son hublot noirci, il n'y a rien à masquer :
-             le conteneur ne sert plus qu'à centrer le canvas, et c'est le fond
-             de la photo — biseau et reflets compris — qui fait le fond.
-             Sinon l'aplat couvre le champ de LEDs de la photo, et lui seul. -->
-        <div
-          class="disc"
-          style="left:{dev.disc.left * 100}%;top:{dev.disc.top * 100}%;width:{grid.fieldCss}px;height:{grid.fieldCss}px;background:{dev
-            .photo.filled
-            ? 'transparent'
-            : DISC_BG[style]}"
-        >
-          <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
-          ></canvas>
-        </div>
+        <!-- Le hublot de la photo est noirci : il n'y a rien à masquer, donc
+             pas d'aplat. Le canvas est posé seul, centré sur le hublot, et
+             c'est le fond de la photo — biseau du verre et reflets compris —
+             qui fait le fond. -->
+        <canvas
+          bind:this={cvs}
+          class="matrix"
+          style="left:{dev.disc.left * 100}%;top:{dev.disc.top *
+            100}%;width:{grid.cssSize}px;height:{grid.cssSize}px"
+        ></canvas>
 
         {#if dev.button}
           <button
@@ -274,31 +278,27 @@
     user-select: none;
   }
 
-  /* la couleur de fond vient du style de LED, posée en inline */
-  /* Le canvas est centré au lieu d'être étiré à 100 % : sa taille est un
-     multiple entier de la cellule, donc rarement le diamètre exact de l'aplat.
-     L'étirer redonnerait la trame irrégulière que le calcul en pixels entiers
-     évite.
+  /* Mode téléphone : le canvas seul, calé sur le centre du hublot. Aucun
+     conteneur, donc aucun cercle qui pourrait rogner une LED — le masque de la
+     matrice teste le centre des cellules, si bien que les LEDs des rangées
+     extrêmes débordent du rayon nominal et se faisaient trancher par le
+     découpage circulaire d'avant. */
+  .matrix {
+    position: absolute;
+    display: block;
+    transform: translate(-50%, -50%);
+  }
 
-     `overflow: visible` est un garde-fou, pas un oubli : le `border-radius`
-     découpe le fond en disque, mais **aucune LED ne doit jamais être rognée par
-     ce cercle**. Le masque de la matrice teste le centre des cellules, si bien
-     que les LEDs des rangées extrêmes débordent du rayon nominal — sous
-     `overflow: hidden` elles se faisaient trancher. L'aplat est dimensionné
-     pour les contenir (voir `enveloppe`), et si un arrondi le prenait en
-     défaut, la LED dépasse plutôt que de disparaître. */
+  /* Mode grand : là il n'y a pas de photo, le disque doit donc être dessiné.
+     La couleur de fond vient du style de LED, posée en ligne. Le canvas y est
+     centré plutôt qu'étiré — sa taille est un multiple entier de la cellule,
+     donc rarement le diamètre exact du hublot, et l'étirer redonnerait la trame
+     irrégulière que le calcul en pixels entiers évite. */
   .disc {
     border-radius: 50%;
-    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  /* position posée en ligne depuis le profil, diamètre depuis la grille */
-  .phone .disc {
-    position: absolute;
-    transform: translate(-50%, -50%);
   }
 
   .disc.big {
@@ -424,7 +424,7 @@
   /* Bande calculée dans le script — voir previewBand / SHARE. Le fondu y est
      plus court : sur une colonne de téléphone, 56 px mordraient sur le bas du
      disque. */
-  @media (max-width: 980px) {
+  @media (max-width: 1140px) {
     .stage {
       --fade: 28px;
       max-height: var(--band);

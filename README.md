@@ -72,6 +72,7 @@ seul pipeline.
 | Masque | disque (12, 12), r = 12,5 | disque (6, 6), r = 6,5 |
 | LEDs pilotables | **489** | **137** |
 | Cerne au bord du hublot | 2 LEDs | 1,5 LED |
+| Part de LED dans le pas | 0,72 | 0,81 |
 | Diamètre du disque | 26,49 % de la largeur du corps | 35,62 % — 34 % de plus |
 | Glyph Button | oui | **non** |
 | Couleur | aucune — luminosité seule, 0-255 par LED | idem |
@@ -94,7 +95,7 @@ qui garde le calage quand la préview est redimensionnée.
 
 Les deux photos sont recadrées au **même format et à la même échelle de corps** —
 704 × 913, corps à 98,3 % de la largeur du cadre. Pas de la symétrie décorative :
-à 576 px de large les deux appareils sont alors montrés à la même taille
+les deux appareils sont alors montrés à la même taille
 physique, et c'est la seule condition pour que comparer les deux matrices veuille
 dire quelque chose. Un dos rendu 10 % plus gros gonflerait sa matrice d'autant.
 
@@ -170,20 +171,26 @@ c'est exactement ce qu'il décrivait.
 
 Deux échelles, au choix :
 
-- **Téléphone** — la matrice à sa taille réelle sur la photo du dos : à 576 px
-  de large, 150 px de diamètre et 6 px par LED sur un (3), 202 px et 15 px par
-  LED sur un (4a) Pro. Les deux dos étant recadrés à la même échelle de corps,
-  c'est bien ce rapport-là qu'on lit. Maintenir le Glyph Button compare avec le
-  même cadrage et la tonalité au repos.
-- **Grand** — le disque seul sur toute la largeur de la colonne, pour lire LED
+- **Téléphone** — la matrice calée sur le hublot de la photo du dos, cerne
+  compris. Maintenir le Glyph Button compare avec le même cadrage et la tonalité
+  au repos.
+- **Grand** — le hublot seul sur toute la largeur de la colonne, pour lire LED
   par LED ce que fait un curseur.
 
-Le téléphone n'est jamais réduit pour tenir dans la fenêtre — ce serait perdre
-l'échelle réelle, qui est tout l'intérêt du mode. Quand la place manque il est
-rogné par le bas : le disque est en haut de l'appareil, ce qu'on perd c'est le
-dos et le Glyph Button. La hauteur gardée se déduit du bas du disque, elle n'est
-pas posée en dur — une constante partagée aurait décapité la matrice du (4a) Pro,
-deux fois plus large.
+Le téléphone est rendu à **728 px** de large. Ce n'est pas un encombrement,
+c'est une taille de LED : à cette largeur le hublot du (3) fait 206 px, soit
+7 px CSS par LED en gardant ses deux largeurs de cerne, et celui du (4a) Pro
+252 px, soit 16 px. À 576 px les mêmes contraintes tombaient sur 6 et 13, et à
+6 px une LED ne fait plus que 4 px de côté — elle se lit comme du bruit. La
+préview ne prétend donc plus rendre l'appareil à sa taille physique, mais à
+celle où sa matrice se lit ; les deux dos étant recadrés à la même échelle de
+corps, le rapport entre les deux matrices reste juste.
+
+Il n'est jamais réduit pour tenir dans la fenêtre. Quand la place manque il est
+rogné par le bas : le hublot est en haut de l'appareil, ce qu'on perd c'est le
+bas du dos. La hauteur gardée se déduit du bas du hublot, elle n'est pas posée
+en dur — une constante partagée aurait décapité la matrice du (4a) Pro, plus
+large et plus basse.
 
 Dans les deux cas une cellule occupe un nombre **entier** de pixels de canvas :
 un canvas redimensionné par le navigateur avec un ratio fractionnaire donne
@@ -200,16 +207,34 @@ d'écran, le cerne mentirait dès que la préview change de taille.
 
 La cellule étant entière, le cerne ne prend que des valeurs discrètes : on
 retient celle dont le cerne tombe le plus près de la consigne, avec un plancher
-d'une demi-LED. Quand deux valeurs se valent, **la netteté prime** : à 576 px et
-dpr 1, le (3) rend ses LEDs en 6 px — 4 px de carré, 2 de gap — plutôt qu'en 5,
-où le carré tombe à 3 et le rendu se brouille.
+d'une demi-LED.
 
-Quand la photo a son hublot déjà noirci (`photo.filled`), il n'y a rien à
-masquer : c'est le fond de la photo qui sert de fond, biseau et reflets compris,
-et le canvas est le seul élément dessiné. Sinon un aplat couvre le champ de LEDs
-de la photo, et lui seul. Il est dimensionné pour contenir toutes les LEDs coins
-compris — le masque teste le centre des cellules, donc les LEDs des rangées
-extrêmes débordent du rayon nominal, et **aucune ne doit jamais être rognée**.
+### L'écart entre LEDs
+
+Il vient du profil et pas d'une constante partagée : les LEDs d'un (4a) Pro sont
+bien plus jointives que celles d'un (3), et les traiter pareil les rendait deux
+fois trop petites — un rendu qui *paraissait* flou alors qu'il était net au
+pixel. Aux tailles de référence : **2 px** d'écart pour le (3) (cellule 7, LED
+de 5), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
+
+L'écart ne dépend pas du style de rendu. Il décrit l'appareil, pas la façon de
+le regarder ; `sharp` et `soft` se distinguent par les angles, le halo et la
+rampe, pas par la géométrie.
+
+Il n'est pas non plus forcé pair. Centrer la LED dans sa cellule imposait une
+marge à la demie dès que l'écart était impair, donc un bord flou — la marge est
+prise au plancher, et l'asymétrie d'un demi-pixel décale la trame entière
+d'autant, ce qui ne se voit pas.
+
+### Le hublot des photos
+
+Les deux photos ont leur **hublot noirci** : c'est une exigence sur l'asset. Il
+n'y a alors rien à masquer, aucun aplat à poser, et c'est le fond de la photo —
+biseau du verre et reflets compris — qui sert de fond. Le canvas est le seul
+élément dessiné, posé sans conteneur : rien ne peut donc rogner une LED, et
+c'est structurel. Un découpage en disque avait été essayé, il coupait les
+rangées extrêmes — le masque teste le centre des cellules, donc une LED retenue
+déborde du rayon nominal de presque une demi-diagonale.
 
 ### Rendu des LED : sharp / soft
 

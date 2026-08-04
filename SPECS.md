@@ -79,11 +79,22 @@ de sa hauteur**.
 | Photo | `phone3-back.webp` | `phone4apro-back.webp` |
 | Cadre | 704 × 913 | 704 × 913 |
 | Corps dans le cadre | 98,3 % | 98,3 % |
-| Hublot — diamètre | 28,13 % | 35,01 % |
-| Hublot — centre | 79,62 % / 15,33 % | 68,67 % / 22,67 % |
+| Hublot — diamètre | 28,27 % | 34,66 % |
+| Hublot — centre | 79,69 % / 15,33 % | 68,82 % / 22,67 % |
 | Cerne (`margin`) | 2 LEDs | 1,5 LED |
-| Hublot noirci (`photo.filled`) | oui | pas encore |
+| Part de LED dans le pas (`duty`) | 0,72 | 13/16 |
 | Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
+
+**Les deux photos ont leur hublot noirci.** C'est une exigence sur l'asset, pas
+une option : la matrice de l'appareil doit avoir été remplie de noir dans
+l'image. Il n'y a alors rien à masquer, aucun aplat à poser, et c'est le fond de
+la photo — biseau du verre et reflets compris — qui sert de fond. Une photo qui
+montrerait encore ses LEDs les laisserait transparaître entre les nôtres.
+
+Noircir un hublot change le diamètre qu'on en mesure : sur le (3), il est passé
+de 183,3 px (la seule zone de LEDs, visible sur la photo d'origine) à 199 px (le
+verre entier). Les cotes ci-dessus sont relevées sur les photos **après**
+noircissement.
 
 Le **cerne** est la bande sombre entre la découpe du hublot et la LED la plus
 proche. Aucune des deux matrices ne va jusqu'au bord, et l'ignorer donnait une
@@ -92,33 +103,31 @@ grille qui touche sa découpe — ce qu'aucun appareil ne fait. Il est exprimé 
 de taille, alors qu'en largeurs de LED il reste juste partout et le hublot vaut
 simplement `size + 2 × margin` cellules.
 
-Les deux valeurs sont relevées sur les photos. Sur le (3), le hublot mesuré est
-le **verre entier** (198 px, biseau compris) et non la seule zone de LEDs
-(~170 px) : d'où 2 LEDs de cerne. Sur le (4a) Pro, première LED à ~24 px d'un
-hublot de 246,5 px, soit 1,5.
+Sur le (3), le hublot mesuré est le **verre entier** (199 px, biseau compris) et
+non la seule zone de LEDs (~170 px) : d'où 2 LEDs de cerne. Sur le (4a) Pro, le
+relevé de la photo d'origine donne un pas de 18,67 px dans un hublot de 300
+(source 2048²), donc un champ de 13 × 18,67 = 242,7 px et un cerne de
+(300 − 242,7)/2 = 28,6 px, soit **1,53 pas** — la consigne n'est pas estimée.
 
-#### Photos au hublot noirci
+#### La part de LED dans le pas
 
-`photo.filled` dit si la photo montre encore la matrice de l'appareil.
+`duty` dit quelle fraction du pas la LED occupe, le reste étant l'écart entre
+deux. Les deux appareils n'ont rien à voir : sur un (4a) Pro les LEDs sont
+nettement plus jointives, et les traiter comme celles du (3) les rendait deux
+fois trop petites — un rendu qui paraissait flou alors qu'il était net au pixel.
 
-À `true` — cas du (3) — le hublot a été rempli de noir dans l'image : il n'y a
-plus rien à masquer, aucun aplat n'est posé, et c'est le fond de la photo qui
-sert de fond, biseau et reflets compris. C'est la forme la plus simple et la
-plus fidèle : un seul élément dessiné, le canvas.
-
-À `false` — cas du (4a) Pro pour l'instant — la photo montre encore ses LEDs et
-il faut les recouvrir avant d'y peindre les nôtres, d'où l'aplat décrit plus
-bas. Basculer le drapeau demande de **relever à nouveau les cotes** : noircir un
-hublot en change le diamètre mesurable, sur le (3) il est passé de 183,3 à
-198 px.
+La même mesure de photo donnait 17 px de LED sur 18,67 de pas, soit 0,911. C'est
+surestimé : une LED allumée déborde sur une photo, et le seuil de détection
+ramasse son halo autant qu'elle. La valeur retenue, 13/16, est celle qui rend
+**3 px d'écart** à la cellule de référence de 16 px.
 
 #### Le même gabarit pour les deux
 
 Les deux photos sont recadrées au **même format et à la même échelle de corps**.
-Ce n'est pas de la symétrie décorative : à 576 px de large, les deux appareils
-sont alors montrés à la même taille physique, et c'est la seule condition pour
-que comparer les deux matrices veuille dire quelque chose. Un dos rendu 10 %
-plus gros gonflerait sa matrice d'autant, et la comparaison mentirait d'autant.
+Ce n'est pas de la symétrie décorative : les deux appareils sont alors montrés à
+la même taille, et c'est la seule condition pour que comparer les deux matrices
+veuille dire quelque chose. Un dos rendu 10 % plus gros gonflerait sa matrice
+d'autant, et la comparaison mentirait d'autant.
 
 Le recadrage du (4a) Pro se déduit donc de la photo du (3) : corps à 98,3 % de
 la largeur du cadre, hauteur du cadre à 913/692 de la largeur du corps. Sur une
@@ -487,16 +496,22 @@ Deux axes indépendants.
 
 **Échelle** :
 
-| Mode | Grille | Rendu |
-|---|---|---|
-| Téléphone | `diamètre affiché / size` px CSS par LED | matrice calée sur le dos de l'appareil |
-| Grand | `max(6, ⌊côté / size⌋)` px par LED | disque seul |
+| Mode | Rendu |
+|---|---|
+| Téléphone | matrice calée sur le hublot de la photo, cerne compris |
+| Grand | hublot seul, sur toute la largeur de la colonne |
 
-Les deux sont larges de `min(576, largeur de colonne)`. À 576 px, le disque du
-Phone (3) mesure 150 px soit **6 px CSS par LED**, celui du Phone (4a) Pro
-202 px soit **15 px** : dans les deux cas l'échelle réelle de l'appareil, les
-deux dos étant recadrés à la même échelle de corps (§ 2.1). C'est bien le
-rapport entre les deux qu'il s'agit de montrer.
+Les deux sont larges de `min(728, largeur de colonne)`.
+
+**728 px n'est pas un encombrement, c'est une taille de LED.** À cette largeur
+le hublot du (3) fait 206 px, ce qui laisse **7 px CSS par LED** en gardant ses
+deux largeurs de cerne, et celui du (4a) Pro 252 px, soit **16 px**. À 576 px
+les mêmes contraintes tombaient sur 6 et 13, et à 6 px une LED ne fait plus que
+4 px de côté — elle se lit comme du bruit. Les deux dos étant recadrés à la même
+échelle de corps (§ 2.1), le rapport entre les deux matrices reste juste.
+
+C'est un arbitrage assumé : la préview ne prétend plus rendre l'appareil à sa
+taille physique, elle le rend à la taille où sa matrice se lit.
 
 **Le téléphone n'est jamais réduit pour tenir en hauteur** — le rétrécir
 viderait le mode de son sens. Quand la place manque il est **rogné par le
@@ -507,9 +522,11 @@ deux côtés et mangerait la matrice.
 Le disque seul, lui, **se réduit** plutôt que d'être rogné : il n'a pas
 d'échelle réelle à préserver et le couper ferait perdre des LEDs.
 
-Seule une colonne plus étroite que 576 px contraint la largeur, et la cellule
+Seule une colonne plus étroite que 728 px contraint la largeur, et la cellule
 suit alors le diamètre réellement affiché : une valeur figée donnerait une
-trame irrégulière.
+trame irrégulière. La bascule en colonne unique se fait à **1140 px** et non à
+980 : en dessous, 728 px de téléphone, 25,6 de gouttière et les 300 px minimum
+du rack ne tiennent plus côte à côte, marges comprises.
 
 Un fondu de 56 px (28 px en colonne unique) marque le bord du rognage, et
 seulement quand il y a rognage. Les photos se terminent en outre par leur propre
@@ -522,10 +539,25 @@ trancherait dedans.
 |---|---|---|
 | Forme | carré vif | angles adoucis, r = 24 % du côté |
 | Halo | `shadowBlur = cellule × 0,55 × b` | aucun |
-| Demi-gap | `round(cellule × 0,167)` | `round(cellule × 0,14)` |
+| Écart | `round(cellule × (1 − duty))` | identique |
 | Rampe alpha | `0,25 + 0,75 b` | `0,08 + 0,92 b` |
 | LED éteinte | `#1b1b20` | `#08080a` |
 | Fond du disque | `#08080a` | `#131316` |
+
+**L'écart ne dépend pas du style.** Il décrit l'appareil, pas la façon de le
+regarder : le creuser en `soft` revenait à prétendre que ses LEDs s'écartent
+quand on change de rendu. Ce qui distingue `soft`, ce sont les angles, le halo
+et la rampe.
+
+**L'écart n'est plus forcé pair.** Il l'était tant que la LED était centrée dans
+sa cellule — la marge tombait alors à la demie pour un écart impair, et un bord
+à la demie est un bord flou. La marge est donc prise au **plancher** et
+l'asymétrie d'un demi-pixel décale la trame entière d'autant, ce qui ne se voit
+pas. Sans ça, un (4a) Pro à 16 px de cellule ne pouvait pas avoir ses 3 px
+d'écart : seulement 2 ou 4.
+
+Écarts obtenus aux tailles de référence : **2 px** pour le (3) (cellule 7, LED
+de 5), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
 
 `sharp` émule l'appareil. `soft` est fait pour un affichage tel quel sur un
 écran : sans halo pour porter l'intensité, un plancher à 0,25 écraserait tout
@@ -540,19 +572,20 @@ une luminance n'est pas une teinte et rien ne dit que le blanc ait bougé.
 
 #### Grille en pixels entiers
 
-Une cellule occupe un nombre **entier** de pixels de canvas, et le gap est
-forcé pair pour que la marge reste entière :
+Une cellule occupe un nombre **entier** de pixels de canvas, et la LED comme sa
+marge tombent sur des entiers :
 
 ```
 cerne(cellule) = (diamètre du hublot / cellule − size) / 2      en largeurs de LED
-demiGap        = max(1, round(cellule × ratio du style))
-led            = max(2, cellule − 2 × demiGap)
+ecart          = max(1, round(cellule × (1 − duty) × facteur de style))
+led            = max(2, cellule − ecart)
+marge          = ⌊(cellule − led) / 2⌋
 ```
 
 Un canvas de taille fixe redimensionné par le navigateur avec un ratio
 fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
 de gap. La taille CSS du canvas est donc dérivée du backing (`size / dpr`),
-ratio exactement 1, et **le canvas est centré dans le hublot, jamais étiré**.
+ratio exactement 1, et **le canvas n'est jamais étiré**.
 
 **Le choix de la cellule se fait sur le cerne, pas sur la taille.** La cellule
 étant entière, le cerne ne prend que des valeurs discrètes ; on retient donc,
@@ -567,43 +600,18 @@ Il garantit du même coup que la grille rentre toujours dans le hublot, donc
 qu'aucune LED ne s'y fait rogner.
 
 **Ce que la quantification coûte.** Elle est d'autant plus rude que la cellule
-est petite. Sur les largeurs de colonne utiles (300 → 576 px), cerne médian
-obtenu :
+est petite, et c'est ce qui a fixé la largeur de cadre à 728 px : à 576, le
+hublot du (3) faisait 162 px pour 25 LEDs, la cellule ne pouvait valoir que 5 ou
+6, et le cerne que 3,7 ou 1 LED. Aucune combinaison ne donnait à la fois la
+consigne et une LED lisible.
 
-Le (4a) Pro tombe juste partout : 13 LEDs dans un hublot large, la cellule est
-grosse et le pas fin. Le (3) est plus contraint — à 576 px et dpr 1 son hublot
-fait 162 px pour 25 LEDs, la cellule ne peut valoir que 5 ou 6 px, et le cerne
-que 3,7 ou 1 LED. La consigne de 2 fait retenir 6, ce qui **prime la netteté** :
-à 6 px la LED fait 4 px de côté pour 2 de gap, à 5 elle tombe à 3 pour 2 et le
-rendu se brouille. Une matrice un peu trop grande se voit moins qu'une matrice
-molle.
-
-#### L'aplat qui masque la photo
-
-Seulement pour une photo à `filled: false`, dont le hublot montre encore la
-matrice de l'appareil.
-
-Le fond sombre ne fait alors **pas** le diamètre du hublot. Il ne couvre que le
-champ de LEDs : le cerne de la photo porte le biseau du verre et ses reflets, et
-l'aplatir sous du noir uni supprimait le seul détail qui donne au rendu l'air
-d'être posé sur l'appareil plutôt que collé dessus.
-
-Son diamètre est le plus grand de deux exigences, plafonné au hublot :
-
-| Contrainte | Ce qu'elle impose |
-|---|---|
-| Champ de la photo | couvrir les LEDs de la photo — cote **idéale**, non quantifiée, pour ne pas bouger avec l'arrondi de la cellule |
-| Enveloppe des LEDs | contenir toutes nos LEDs, coins compris : `2 × (maxDist + √2/2) × cellule` |
-
-`maxDist` n'est pas le rayon du masque. Celui-ci teste le **centre** des
-cellules, si bien qu'une LED retenue déborde du cercle nominal de presque une
-demi-diagonale : sur une grille de 13, la plus lointaine est à 6,403 cellules et
-non 6,5. Dimensionner l'aplat sur 6,5 rognait les LEDs des rangées extrêmes.
-
-**Aucune LED ne doit jamais être rognée par ce cercle.** L'enveloppe le garantit
-par le calcul ; `overflow: visible` le garantit une seconde fois, quoi qu'il
-arrive à l'arrondi. Une LED qui dépasse est un défaut mineur, une LED coupée est
-une matrice qui ment sur son contenu.
+**Aucune LED ne doit jamais être rognée.** En mode téléphone, le canvas est posé
+seul sur la photo, sans conteneur circulaire : il n'y a donc rien qui puisse le
+découper. C'est structurel et non un réglage. Un découpage en disque avait été
+essayé et coupait les LEDs des rangées extrêmes — le masque teste le **centre**
+des cellules, si bien qu'une LED retenue déborde du cercle nominal de presque
+une demi-diagonale (sur une grille de 13, la plus lointaine est à 6,403 cellules
+et non 6,5).
 
 #### Calage sur le dos
 
