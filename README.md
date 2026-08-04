@@ -40,8 +40,9 @@ Le détail fonctionnel — formules, bornes, invariants, schéma JSON — est da
   l'histogramme sur les extrêmes réellement présents dans l'image.
 - **Choisir la sortie LED** : de 2 à 64 paliers de luminosité, plafond de
   luminosité, dithering Floyd-Steinberg ou Bayer 4 × 4 avec dosage.
-- **Comparer avant / après** en maintenant le Glyph Button : même cadrage,
-  tonalité au repos.
+- **Comparer avant / après** en maintenant le Glyph Button — ou le bouton en
+  barre sous la préview quand l'appareil n'en a pas, comme le (4a) Pro : même
+  cadrage, tonalité au repos.
 - **Prévisualiser** à deux échelles (sur le dos du téléphone à taille réelle,
   ou disque plein cadre) et dans deux styles de LED (`sharp` / `soft`).
 - **Exporter** en PNG, en `IntArray` Kotlin prêt à coller dans un Glyph Toy,
@@ -70,23 +71,34 @@ seul pipeline.
 | Grille | 25 × 25 = 625 cellules | 13 × 13 = 169 cellules |
 | Masque | disque (12, 12), r = 12,5 | disque (6, 6), r = 6,5 |
 | LEDs pilotables | **489** | **137** |
-| Diamètre du disque | 26,04 % de la largeur | 40,9 % — 57 % de plus |
+| Diamètre du disque | 26,49 % de la largeur du corps | 35,62 % — 34 % de plus |
+| Glyph Button | oui | **non** |
 | Couleur | aucune — luminosité seule, 0-255 par LED | idem |
 
 Rien n'est écrit en dur : `buildGeometry(size)` recalcule tout, et un appareil
-n'est qu'une entrée de `src/lib/devices.ts`.
+n'est qu'une entrée de `src/lib/devices.ts` plus une photo dans `public/`.
 
 Géométrie et calage de la photo du (3) repris de
 [`glyphlapse`](https://github.com/aero-md/glyphlapse) — `SPECS.md` et
-`SPECS-PREVIEW.md`. Toutes les positions sont en pourcentage du cadre, jamais en
-pixels : c'est ce qui garde le calage quand la préview est redimensionnée.
+`SPECS-PREVIEW.md`. Les cotes du (4a) Pro sont relevées sur sa photo, pas
+déduites d'un communiqué : disque de 300 px centré en (1184,5 ; 390) dans une
+source de 2048², corps large de 842 px. La presse de lancement annonçait un
+cercle « 57 % plus grand » ; la photo donne +34 %, et c'est elle qui pilote le
+rendu.
 
-Le dos du **(4a) Pro** est un **schéma**, pas une photo. Ce qui y est exact : la
-grille 13 × 13, les 137 LEDs et le diamètre du disque — 57 % de plus que celui
-du (3) à largeur d'appareil égale, la seule cote publiée, et celle qui fixe
-l'échelle réelle des LEDs. La découpe du plateau caméra, les trois objectifs et
-la position du bouton sont approximatifs : faute de photo, un plan au filet
-s'assume mieux qu'un rendu qui se ferait passer pour l'objet.
+Toutes les positions sont en pourcentage du cadre, jamais en pixels : c'est ce
+qui garde le calage quand la préview est redimensionnée.
+
+### Le même gabarit pour les deux dos
+
+Les deux photos sont recadrées au **même format et à la même échelle de corps** —
+704 × 913, corps à 98,3 % de la largeur du cadre. Pas de la symétrie décorative :
+à 576 px de large les deux appareils sont alors montrés à la même taille
+physique, et c'est la seule condition pour que comparer les deux matrices veuille
+dire quelque chose. Un dos rendu 10 % plus gros gonflerait sa matrice d'autant.
+
+Le recadrage du (4a) Pro se déduit donc de la photo du (3), et retombe sur le
+même 704 × 913 au millième d'aspect près.
 
 ## Chaîne de conversion
 
@@ -157,11 +169,11 @@ c'est exactement ce qu'il décrivait.
 
 Deux échelles, au choix :
 
-- **Téléphone** — la matrice à sa taille réelle sur le dos de l'appareil : à
-  576 px de large, 150 px de diamètre et 6 px par LED sur un (3), 236 px et
-  18 px par LED sur un (4a) Pro. C'est bien ce rapport-là qu'il s'agit de
-  montrer. Maintenir le Glyph Button compare avec le même cadrage et la tonalité
-  au repos.
+- **Téléphone** — la matrice à sa taille réelle sur la photo du dos : à 576 px
+  de large, 150 px de diamètre et 6 px par LED sur un (3), 202 px et 15 px par
+  LED sur un (4a) Pro. Les deux dos étant recadrés à la même échelle de corps,
+  c'est bien ce rapport-là qu'on lit. Maintenir le Glyph Button compare avec le
+  même cadrage et la tonalité au repos.
 - **Grand** — le disque seul sur toute la largeur de la colonne, pour lire LED
   par LED ce que fait un curseur.
 
@@ -175,7 +187,10 @@ deux fois plus large.
 Dans les deux cas une cellule occupe un nombre **entier** de pixels de canvas :
 un canvas redimensionné par le navigateur avec un ratio fractionnaire donne
 une trame irrégulière, une colonne sur n gagne un pixel de gap. La grille est
-donc calculée depuis le `devicePixelRatio`.
+donc calculée depuis le `devicePixelRatio`, au **plancher** — arrondie au
+supérieur elle déborde du disque, qui l'étire, et on retombe sur la trame
+irrégulière. Le canvas est centré dans le disque plutôt qu'étiré à 100 % ; le
+cerne de fond qui reste au pourtour est ce qu'on voit sur l'appareil.
 
 ### Rendu des LED : sharp / soft
 

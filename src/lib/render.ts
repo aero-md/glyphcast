@@ -34,7 +34,16 @@ export function screenGrid(
   cellCss = 6,
   dpr = window.devicePixelRatio || 1,
 ): Grid {
-  const cell = Math.max(3, Math.round(cellCss * dpr));
+  // Plancher et non arrondi : la grille doit **tenir** dans la place demandée.
+  // Arrondie au supérieur elle déborde du disque, qui l'étire alors d'un facteur
+  // non entier — et une trame étirée élargit une colonne sur n, exactement ce
+  // que le calcul en pixels entiers cherche à éviter.
+  //
+  // La tolérance de `1 / size` vaut un pixel de débord **sur toute la grille**,
+  // que le disque absorbe sans que ça se voie. Sans elle, un diamètre relevé au
+  // dix-millième coûte une cellule entière : sur un Phone (3) à 576 px,
+  // 0,2604 × 576 / 25 donne 5,9996 et la matrice retombait à 5 px par LED.
+  const cell = Math.max(3, Math.floor(cellCss * dpr + 1 / d.size));
   const size = d.size * cell;
   return { cell, size, cssSize: size / dpr };
 }

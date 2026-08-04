@@ -69,32 +69,49 @@ ne connaît de taille de grille.
 
 ### 2.1 Calage de la préview
 
-Un profil porte aussi de quoi dessiner le dos de l'appareil. Convention : **x et
-diamètres en fraction de la largeur du cadre, y en fraction de sa hauteur**.
+Un profil porte aussi la photo du dos et les cotes qui s'y rapportent.
+Convention : **x et diamètres en fraction de la largeur du cadre, y en fraction
+de sa hauteur**.
 
 | Repère | Phone (3) | Phone (4a) Pro |
 |---|---:|---:|
-| Cadre (l/h) | 704 / 913 | 704 / 620 |
-| Fond | photo | schéma tracé |
-| Disque — diamètre | 26,04 % | 40,9 % |
-| Disque — centre | 79,53 % / 15,36 % | 34 % / 30 % |
-| Glyph Button — centre | 84,53 % / 74,82 % | 12 % / 78 % |
+| Photo | `phone3-back.webp` | `phone4apro-back.webp` |
+| Cadre | 704 × 913 | 704 × 913 |
+| Corps dans le cadre | 98,3 % | 98,3 % |
+| Disque — diamètre | 26,04 % | 35,01 % |
+| Disque — centre | 79,53 % / 15,36 % | 68,67 % / 22,67 % |
+| Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
 
-Ce qui est **mesuré** sur le (4a) Pro : la grille 13 × 13, les 137 LEDs, et le
-diamètre du disque — 57 % de plus que celui du (3) à largeur d'appareil égale,
-soit 0,2604 × 1,57. C'est la seule cote publiée, et c'est celle qui compte :
-elle fixe l'échelle réelle des LEDs, donc tout ce que le mode « téléphone » a à
-dire.
+#### Le même gabarit pour les deux
 
-Ce qui est **schématique** : la découpe du plateau caméra, les trois objectifs
-et la position du bouton. Faute de photo, le fond est un plan au filet plutôt
-qu'un rendu approximatif qui se ferait passer pour l'objet. Le remplacer par une
-photo un jour ne demande que de passer le `backdrop` du profil en `kind:
-"photo"`.
+Les deux photos sont recadrées au **même format et à la même échelle de corps**.
+Ce n'est pas de la symétrie décorative : à 576 px de large, les deux appareils
+sont alors montrés à la même taille physique, et c'est la seule condition pour
+que comparer les deux matrices veuille dire quelque chose. Un dos rendu 10 %
+plus gros gonflerait sa matrice d'autant, et la comparaison mentirait d'autant.
+
+Le recadrage du (4a) Pro se déduit donc de la photo du (3) : corps à 98,3 % de
+la largeur du cadre, hauteur du cadre à 913/692 de la largeur du corps. Sur une
+source de 2048² où le corps mesure 842 px de large, ça donne une fenêtre de
+857 × 1111 réduite à 704 × 913 — le format du (3), au millième d'aspect près.
+
+#### Ce que valent les cotes
+
+Toutes relevées **sur la photo**, aucune déduite d'un communiqué. Sur le (4a)
+Pro : disque de 300 px de diamètre centré en (1184,5 ; 390) dans la source,
+corps large de 842 px.
+
+Le disque fait donc **34 % de plus en diamètre** que celui du (3) à largeur de
+corps égale — 35,62 % contre 26,49 %. La presse de lancement annonçait +57 % ;
+la photo dit autre chose, et c'est elle qui pilote le rendu.
+
+Le (4a) Pro **n'a pas de Glyph Button**. Son profil n'a donc pas de champ
+`button`, et la comparaison avant/après y bascule sur le bouton en barre du mode
+« grand » (§ 5.4). La capsule visible sous la matrice n'en est pas un.
 
 La hauteur de bande gardée en colonne unique se **dérive** du bas du disque
-(`previewBand`) au lieu d'être posée en dur : à disque deux fois plus large, une
-constante partagée aurait décapité la matrice du (4a) Pro.
+(`previewBand`) au lieu d'être posée en dur : le (4a) Pro porte une matrice plus
+large et placée plus bas, une constante partagée l'aurait décapitée.
 
 ---
 
@@ -293,8 +310,9 @@ ne changent que ce qu'on en voit.
 La bascule est non destructive et immédiate. Ce qui **ne bouge pas** : l'image
 chargée, le cadrage, le mixeur, la tonalité, la sortie LED, l'échelle de préview,
 le style de LED, le thème. Ce qui **suit** : la grille et le masque, le compteur
-de LEDs, le dos affiché, l'échelle en px/LED, l'en-tête, le pied de page, la
-longueur de l'IntArray et le nom des fichiers exportés.
+de LEDs, la photo du dos et le calage dessus, l'échelle en px/LED, la présence
+d'un Glyph Button, l'en-tête, le pied de page, la longueur de l'IntArray et le
+nom des fichiers exportés.
 
 C'est ce qui permet de régler une image une fois et de lire, en un clic, ce que
 chacune des deux matrices en garde. Un réglage réencodé à la bascule aurait fait
@@ -409,11 +427,16 @@ cloueraient le point noir à 0 quelle que soit l'image.
 
 ### 5.4 Comparaison avant / après
 
-Maintenir le **Glyph Button** (mode téléphone) ou le bouton **Maintenir**
-(mode grand) affiche le rendu de référence : mêmes réglages de **cadrage**,
-tout le reste aux valeurs par défaut. C'est ce que donnerait l'image sans
-aucun réglage tonal — pas l'image d'origine, qui n'aurait pas le même
-cadrage et ne serait donc pas comparable.
+Maintenir le **Glyph Button** ou le bouton **Maintenir** en barre affiche le
+rendu de référence : mêmes réglages de **cadrage**, tout le reste aux valeurs
+par défaut. C'est ce que donnerait l'image sans aucun réglage tonal — pas
+l'image d'origine, qui n'aurait pas le même cadrage et ne serait donc pas
+comparable.
+
+Lequel des deux s'affiche dépend de ce qu'il y a à l'écran : le Glyph Button
+quand le profil en déclare un et qu'on est en mode téléphone, le bouton en barre
+sinon — mode grand, ou appareil sans Glyph Button comme le (4a) Pro. La fonction
+ne dépend donc d'aucun bouton physique ; seule sa mise en scène change.
 
 Le relâchement, la sortie du pointeur et l'annulation du geste par le
 navigateur reviennent tous au rendu courant. Au clavier, `Entrée` / `Espace`
@@ -441,14 +464,15 @@ Deux axes indépendants.
 
 Les deux sont larges de `min(576, largeur de colonne)`. À 576 px, le disque du
 Phone (3) mesure 150 px soit **6 px CSS par LED**, celui du Phone (4a) Pro
-236 px soit **18 px** : dans les deux cas l'échelle réelle de l'appareil, et
-c'est bien le rapport entre les deux qu'il s'agit de montrer.
+202 px soit **15 px** : dans les deux cas l'échelle réelle de l'appareil, les
+deux dos étant recadrés à la même échelle de corps (§ 2.1). C'est bien le
+rapport entre les deux qu'il s'agit de montrer.
 
 **Le téléphone n'est jamais réduit pour tenir en hauteur** — le rétrécir
 viderait le mode de son sens. Quand la place manque il est **rogné par le
-bas** : le disque est dans le haut de l'appareil, ce qu'on perd est le dos et
-le Glyph Button, décoratifs. D'où l'alignement en haut du cadre, un centrage
-rognerait des deux côtés et mangerait la matrice.
+bas** : le disque est dans le haut de l'appareil, ce qu'on perd est le bas du
+dos, décoratif. D'où l'alignement en haut du cadre, un centrage rognerait des
+deux côtés et mangerait la matrice.
 
 Le disque seul, lui, **se réduit** plutôt que d'être rogné : il n'a pas
 d'échelle réelle à préserver et le couper ferait perdre des LEDs.
@@ -458,11 +482,9 @@ suit alors le diamètre réellement affiché : une valeur figée donnerait une
 trame irrégulière.
 
 Un fondu de 56 px (28 px en colonne unique) marque le bord du rognage, et
-seulement quand il y a rognage.
-
-La photo du (3) se termine en outre par son propre dégradé (86 % → 99 %) : elle
-n'a pas de bord franc, la couper net trancherait dedans. Le schéma du (4a) Pro
-n'en a pas — c'est un plan, il s'arrête sur une arête.
+seulement quand il y a rognage. Les photos se terminent en outre par leur propre
+dégradé (86 % → 99 %) : elles n'ont pas de bord franc, les couper net
+trancherait dedans.
 
 **Style de LED** :
 
@@ -492,7 +514,7 @@ Une cellule occupe un nombre **entier** de pixels de canvas, et le gap est
 forcé pair pour que la marge reste entière :
 
 ```
-cellule = max(3, round(px CSS visés × devicePixelRatio))
+cellule = max(3, ⌊px CSS visés × devicePixelRatio + 1/size⌋)
 demiGap = max(1, round(cellule × ratio du style))
 led     = max(2, cellule − 2 × demiGap)
 ```
@@ -502,6 +524,18 @@ fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
 de gap. La taille CSS du canvas est donc dérivée du backing (`size / dpr`),
 ratio exactement 1.
 
+**Plancher et non arrondi.** Arrondie au supérieur, la grille déborde du disque
+qui l'étire — et c'est précisément la trame irrégulière qu'on cherche à éviter.
+La tolérance de `1/size` vaut un pixel de débord sur toute la grille, que le
+disque absorbe sans que ça se voie ; sans elle, un diamètre relevé au
+dix-millième coûte une cellule entière — sur un Phone (3) à 576 px,
+`0,2604 × 576 / 25` vaut 5,9996 et la matrice retombait à 5 px par LED.
+
+**Le canvas est centré dans le disque, pas étiré à 100 %.** Sa taille est un
+multiple entier de la cellule, donc rarement le diamètre exact du disque. Ce qui
+reste — au pire quelques pixels de fond au pourtour — est ce qu'on voit sur
+l'appareil : un cerne entre la dernière LED et le bord.
+
 #### Calage sur le dos
 
 Positions en **pourcentage du cadre**, jamais en pixels — c'est ce qui garde le
@@ -509,12 +543,12 @@ calage au redimensionnement. Les cotes sont dans le profil d'appareil (§ 2.1),
 pas dans le CSS : le composant de préview ne connaît aucun chiffre.
 
 Le relevé du (3) vient de `SPECS-PREVIEW.md` du repo GlyphLapse, asset
-`phone3-back.webp` partagé. Cadre en `aspect-ratio: 704/913`, rendu au plus à
-576 px de large → disque de 150 px, soit 6 px CSS par LED.
+`phone3-back.webp` partagé. Celui du (4a) Pro est mesuré sur sa photo (§ 2.1).
+Cadre en `aspect-ratio: 704/913` dans les deux cas, rendu au plus à 576 px de
+large.
 
-Le rappel « maintenir » se range **du côté où il reste de la place** : à gauche
-du bouton sur un (3), qui l'a à droite du dos ; à droite sur un (4a) Pro, qui
-l'a à gauche. Ancré du mauvais côté, il sortirait du cadre.
+Le rappel « maintenir » se pose à gauche du Glyph Button, à une cote dérivée de
+la sienne. Le seul appareil qui en porte un l'a à droite du dos.
 
 ### 5.6 Lectures
 

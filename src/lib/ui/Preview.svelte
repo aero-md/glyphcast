@@ -4,10 +4,10 @@
 
 <script lang="ts">
   /* Deux échelles pour la même matrice.
-     - « téléphone » : rendue à sa position et à son échelle réelles sur le dos
-       de l'appareil. Positions en pourcentage du cadre, jamais en px — c'est ce
-       qui garde le calage quand la préview est redimensionnée. Tout vient du
-       profil : le (3) est un relevé sur photo, le (4a) Pro un schéma coté.
+     - « téléphone » : rendue à sa position et à son échelle réelles sur la photo
+       du dos. Positions en pourcentage du cadre, jamais en px — c'est ce qui
+       garde le calage quand la préview est redimensionnée. Tout vient du profil,
+       ce composant ne connaît aucune cote.
      - « grand » : le disque seul sur toute la largeur de la colonne, pour lire
        LED par LED ce que fait un réglage.
 
@@ -15,7 +15,7 @@
      `frame.device`. Une trame et son cadre ne peuvent donc pas se désaccorder
      pendant une bascule d'appareil. */
   import { onMount } from "svelte";
-  import { previewBand, type Disc } from "../devices";
+  import { DEVICES, previewBand, type Disc } from "../devices";
   import type { Frame } from "../pipeline";
   import { DISC_BG, paint, screenGrid, type Grid, type LedStyle } from "../render";
 
@@ -61,6 +61,13 @@
     };
     sync();
     window.addEventListener("resize", sync);
+
+    /* Les dos des autres appareils sont préchargés une fois la page montée :
+       sans ça, la première bascule laisse un trou le temps du téléchargement, et
+       une bascule qui clignote n'a pas l'air instantanée. Après le montage et
+       pas avant — le premier rendu ne doit rien attendre. */
+    for (const dev of DEVICES) new Image().src = dev.photo.src;
+
     return () => window.removeEventListener("resize", sync);
   });
 
@@ -107,15 +114,10 @@
      l'arrondi à l'entier ferait apparaître le fondu sur un cheveu */
   const clipped = $derived(stageH > 0 && naturalH - stageH > 2);
 
-  /* La légende du Glyph Button se range du côté où il reste de la place : le
-     bouton est à droite sur un (3), à gauche sur un (4a) Pro. Ancrée du mauvais
-     côté, elle sortirait du cadre. */
-  const hintRight = $derived(dev.button.left < 0.5);
-  const hintX = $derived(
-    hintRight
-      ? dev.button.left + dev.button.pct / 2 + 0.02
-      : dev.button.left - dev.button.pct / 2 - 0.02,
-  );
+  /* La légende se pose à gauche du Glyph Button : le seul appareil qui en porte
+     un l'a à droite du dos. La cote vient du profil et non du CSS ; le jour où
+     l'un le porte à gauche, ça se règle ici. */
+  const hintX = $derived(dev.button ? dev.button.left - dev.button.pct / 2 - 0.02 : 0);
 
   $effect(() => {
     if (!cvs) return;
@@ -146,48 +148,34 @@
   <div class="stage" class:clipped style="--band:{band}px" bind:clientHeight={stageH}>
     {#if mode === "phone"}
       <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
-        {#if dev.backdrop.kind === "photo"}
-          <img src={dev.backdrop.src} alt={dev.backdrop.alt} draggable="false" />
-        {:else}
-          {@const b = dev.backdrop}
-          <!-- Schéma, pas photo : filets d'1 px sur corps plein. Il dit où sont
-               les choses sans prétendre montrer l'objet. -->
-          <div class="plate" role="img" aria-label="Schéma du dos d'un {dev.name}">
-            <span
-              class="plateau"
-              style="left:{b.plateau.left * 100}%;top:{b.plateau.top * 100}%;width:{b
-                .plateau.width * 100}%;height:{b.plateau.height * 100}%"
-            ></span>
-            {#each b.lenses as lens, i (i)}
-              <span class="lens" style={at(lens)}></span>
-            {/each}
-          </div>
-        {/if}
+        <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
         <div class="disc" style="{at(dev.disc)};background:{DISC_BG[style]}">
-          <canvas bind:this={cvs}></canvas>
+          <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
+          ></canvas>
         </div>
 
-        <button
-          class="glyphbtn"
-          class:is-held={held}
-          disabled={!compare}
-          style={at(dev.button)}
-          aria-label="Glyph Button — maintenir pour comparer avec le rendu sans réglages"
-          {...holdHandlers}
-        ></button>
+        {#if dev.button}
+          <button
+            class="glyphbtn"
+            class:is-held={held}
+            disabled={!compare}
+            style={at(dev.button)}
+            aria-label="Glyph Button — maintenir pour comparer avec le rendu sans réglages"
+            {...holdHandlers}
+          ></button>
 
-        <!-- pas de légende quand il n'y a rien à comparer : elle promettrait une
-             action que le bouton désactivé ne rend pas -->
-        {#if compare}
-          <span
-            class="hint"
-            class:on={held}
-            class:right={hintRight}
-            style="left:{hintX * 100}%;top:{dev.button.top * 100}%"
-          >
-            {held ? "Rendu brut" : "Maintenir"}
-          </span>
+          <!-- pas de légende quand il n'y a rien à comparer : elle promettrait
+               une action que le bouton désactivé ne rend pas -->
+          {#if compare}
+            <span
+              class="hint"
+              class:on={held}
+              style="left:{hintX * 100}%;top:{dev.button.top * 100}%"
+            >
+              {held ? "Rendu brut" : "Maintenir"}
+            </span>
+          {/if}
         {/if}
       </div>
     {:else}
@@ -195,12 +183,16 @@
         class="disc big"
         style="width:{grid.cssSize}px;height:{grid.cssSize}px;background:{DISC_BG[style]}"
       >
-        <canvas bind:this={cvs}></canvas>
+        <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
+        ></canvas>
       </div>
     {/if}
   </div>
 
-  {#if mode === "large"}
+  <!-- L'A/B en barre : quand il n'y a pas de téléphone à l'écran, et quand
+       l'appareil affiché n'a pas de Glyph Button sur lequel le poser. La
+       fonction ne dépend donc d'aucun bouton physique. -->
+  {#if mode === "large" || !dev.button}
     <button class="ab" class:is-held={held} disabled={!compare} {...holdHandlers}>
       {held ? "Rendu brut" : "Maintenir : avant / après"}
     </button>
@@ -256,17 +248,12 @@
     position: relative;
   }
 
-  .phone img,
-  .plate {
-    position: absolute;
-    inset: 0;
-  }
-
   /* La photo n'a pas de bord franc : elle se termine en fondu, sinon la bande
      basse se ferait couper net. Un aplat superposé masquerait la trame de fond
-     de page, d'où le masque. Le schéma, lui, a une arête — c'est un plan, il
-     s'arrête. */
+     de page, d'où le masque plutôt qu'un calque. */
   .phone img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     display: block;
@@ -279,37 +266,18 @@
     user-select: none;
   }
 
-  /* Corps de l'appareil quand on n'a pas de photo. Angles vifs, filets d'1 px,
-     aucune ombre : c'est un plan, il ne mime pas une prise de vue.
-
-     Trois valeurs de gris qui se suffisent : le plateau est plus clair que le
-     corps, le disque plus sombre que les deux — dans les deux styles de LED.
-     C'est ce qui fait lire la matrice comme une fenêtre ronde sans simuler de
-     profondeur. À corps et plateau de même valeur, le disque disparaissait. */
-  .plate {
-    background: #0b0b0d;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    pointer-events: none;
-  }
-
-  .plateau {
-    position: absolute;
-    background: #17171c;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-  }
-
-  .lens {
-    position: absolute;
-    aspect-ratio: 1;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-  }
-
   /* la couleur de fond vient du style de LED, posée en inline */
+  /* Le canvas est centré au lieu d'être étiré à 100 % : sa taille est un
+     multiple entier de la cellule, donc rarement le diamètre exact du disque.
+     L'étirer redonnerait la trame irrégulière que le calcul en pixels entiers
+     évite. Ce qui reste — au pire quelques pixels de fond au pourtour — est ce
+     qu'on voit sur l'appareil : un cerne entre la dernière LED et le bord. */
   .disc {
     border-radius: 50%;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* position et diamètre posés en ligne depuis le profil */
@@ -324,10 +292,10 @@
     box-shadow: 0 0 0 1px var(--line-strong);
   }
 
+  /* dimensions posées en ligne depuis la grille */
   .disc canvas {
     display: block;
-    width: 100%;
-    height: 100%;
+    flex: none;
   }
 
   /* bouton Glyph, calé sur le bouton de l'appareil */
@@ -377,11 +345,6 @@
        peut pas suivre le thème, elle doit tenir sur du noir dans les deux */
     color: rgba(255, 255, 255, 0.45);
     pointer-events: none;
-  }
-
-  /* bouton à gauche du dos : la légende passe de l'autre côté */
-  .hint.right {
-    transform: translate(0, -50%);
   }
 
   .hint.on {
