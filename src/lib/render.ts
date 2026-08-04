@@ -127,13 +127,22 @@ const OFF: Record<LedStyle, string> = { sharp: "#1b1b20", soft: "#08080a" };
  * jointives que le (3), et les traiter pareil les rendait deux fois trop
  * petites.
  *
- * Le style n'entre pas dans le calcul. L'écart décrit l'appareil, pas la façon
- * de le regarder : le creuser en `soft` revenait à dire que ses LEDs sont plus
- * espacées quand on change de rendu. Ce qui distingue `soft`, ce sont les angles
- * adoucis, l'absence de halo et la rampe alpha — pas la géométrie.
+ * `soft` retire **un pixel** d'écart, pas une proportion. En `sharp`, le halo
+ * déborde de la LED et la fait paraître plus grosse qu'elle n'est ; `soft` n'en
+ * a pas, et ses LEDs se lisent d'autant plus petites. Un pixel rendu compense à
+ * peu près cette perte apparente.
+ *
+ * Un pixel fixe et non un pourcentage, parce que c'est la compensation d'un
+ * effet qui ne dépend pas de la taille de cellule. L'effet relatif suit donc la
+ * finesse de la matrice : nettement visible sur une cellule de 8 px, à peine sur
+ * une de 16.
  */
-export function ledMetrics(cell: number, duty: number): { led: number; pad: number } {
-  const gap = Math.max(1, Math.round(cell * (1 - duty)));
+export function ledMetrics(
+  cell: number,
+  style: LedStyle,
+  duty: number,
+): { led: number; pad: number } {
+  const gap = Math.max(1, Math.round(cell * (1 - duty)) - (style === "soft" ? 1 : 0));
   const led = Math.max(2, cell - gap);
   /* Marge **plancher** et non moitié exacte : c'est ce qui autorise un écart
      impair. Centrer la LED dans sa cellule imposerait une marge à la demie et
@@ -152,7 +161,7 @@ export function paint(
 ): void {
   const { style = "sharp", background = null } = opts;
   const { size, inside, duty } = frame.device;
-  const { led, pad } = ledMetrics(g.cell, duty);
+  const { led, pad } = ledMetrics(g.cell, style, duty);
   const radius = style === "soft" ? led * 0.24 : 0;
   const rounded = radius > 0.5 && typeof ctx.roundRect === "function";
 

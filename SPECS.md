@@ -562,15 +562,19 @@ trancherait dedans.
 |---|---|---|
 | Forme | carré vif | angles adoucis, r = 24 % du côté |
 | Halo | `shadowBlur = cellule × 0,55 × b` | aucun |
-| Écart | `round(cellule × (1 − duty))` | identique |
+| Écart | `round(cellule × (1 − duty))` | le même **moins 1 px** |
 | Rampe alpha | `0,25 + 0,75 b` | `0,08 + 0,92 b` |
 | LED éteinte | `#1b1b20` | `#08080a` |
 | Fond du disque | `#08080a` | `#131316` |
 
-**L'écart ne dépend pas du style.** Il décrit l'appareil, pas la façon de le
-regarder : le creuser en `soft` revenait à prétendre que ses LEDs s'écartent
-quand on change de rendu. Ce qui distingue `soft`, ce sont les angles, le halo
-et la rampe.
+**`soft` retire un pixel d'écart**, pas une proportion. En `sharp`, le halo
+déborde de la LED et la fait paraître plus grosse qu'elle n'est ; `soft` n'en a
+pas, et ses LEDs se lisent d'autant plus petites. Un pixel rendu compense à peu
+près cette perte apparente.
+
+Un pixel fixe et non un pourcentage, parce que c'est la compensation d'un effet
+qui ne dépend pas de la taille de cellule. L'effet relatif suit donc la finesse
+de la matrice : sur un (3) la LED passe de 6 à 7 px, sur un (4a) Pro de 13 à 14.
 
 **L'écart n'est plus forcé pair.** Il l'était tant que la LED était centrée dans
 sa cellule — la marge tombait alors à la demie pour un écart impair, et un bord
