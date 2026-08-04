@@ -78,7 +78,7 @@ seul pipeline.
 | Couleur | aucune — luminosité seule, 0-255 par LED | idem |
 
 Rien n'est écrit en dur : `buildGeometry(size)` recalcule tout, et un appareil
-n'est qu'une entrée de `src/lib/devices.ts` plus une photo dans `public/`.
+n'est qu'une entrée de `src/lib/devices.ts` plus une photo dans `src/assets/`.
 
 Géométrie et calage de la photo du (3) repris de
 [`glyphlapse`](https://github.com/aero-md/glyphlapse) — `SPECS.md` et
@@ -381,8 +381,15 @@ src/lib/render.ts       peinture des LEDs sur canvas (écran et export)
 src/lib/export.ts       PNG / Kotlin / JSON, import de session
 src/lib/ui/             Preview, Slider, Seg, Card, Wordmark, ThemeToggle
 src/App.svelte          rack de réglages et mise en page
-public/phone3-back.webp photo du dos, partagée avec glyphlapse / glyphslot
+src/assets/*.webp       photos des dos, hublot noirci
 ```
+
+Les photos sont dans `src/assets/` et non dans `public/` : importées, elles
+passent par le pipeline de Vite, qui leur donne un nom portant l'empreinte de
+leur contenu. Dans `public/` elles gardaient une URL fixe, et Cloudflare
+continuait de servir la version périmée longtemps après un déploiement — le
+hublot du (3) est resté non noirci en ligne alors que le serveur avait déjà la
+bonne image. Ici l'URL change dès que l'image change.
 
 
 

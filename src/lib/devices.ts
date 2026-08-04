@@ -19,6 +19,14 @@
 
 import { buildGeometry, type Geometry } from "./matrix";
 
+/* Les dos passent par le pipeline d'assets : Vite leur donne un nom portant
+   l'empreinte de leur contenu. Posés dans `public/`, ils gardaient une URL fixe
+   et Cloudflare continuait de servir la version périmée longtemps après un
+   déploiement — le hublot du (3) est resté non noirci en ligne pendant que le
+   Pi servait déjà la bonne image. Ici l'URL change dès que l'image change. */
+import phone3Back from "../assets/phone3-back.webp";
+import phone4aProBack from "../assets/phone4apro-back.webp";
+
 export type DeviceId = "phone3" | "phone4apro";
 
 /** Un disque du dos : centre dans le cadre, diamètre en fraction de largeur. */
@@ -93,7 +101,7 @@ const PHONE3: Device = {
   // 792 px → hublot inscrit de 209,8, où la cellule de 8 px est la plus grande
   // qui laisse encore ses coins de LED à l'intérieur. La LED y fait 6 px.
   frameWidth: 792,
-  photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)" },
+  photo: { src: phone3Back, alt: "Dos d'un Nothing Phone (3)" },
   /* Meilleur **cercle inscrit** dans le hublot noirci : rayon 93,3 px centré en
      (560,5 ; 140,5) dans un cadre de 704 × 913.
 
@@ -135,7 +143,7 @@ const PHONE4A_PRO: Device = {
   // 739 px → hublot inscrit de 248,7, soit une cellule de 16 px. La LED y fait
   // 13 px de côté pour 3 d'écart.
   frameWidth: 739,
-  photo: { src: "/phone4apro-back.webp", alt: "Dos d'un Nothing Phone (4a) Pro" },
+  photo: { src: phone4aProBack, alt: "Dos d'un Nothing Phone (4a) Pro" },
   // meilleur cercle inscrit dans le hublot noirci : rayon 118,5 px centré en
   // (485,5 ; 210). Inscrit et non englobant, pour la même raison que le (3).
   disc: { left: 0.6896, top: 0.23, pct: 0.3366 },
