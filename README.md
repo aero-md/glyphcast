@@ -220,15 +220,28 @@ d'écran, le cerne mentirait dès que la préview change de taille.
 
 La cellule étant entière, le cerne ne prend que des valeurs discrètes : on
 retient celle dont le cerne tombe le plus près de la consigne, avec un plancher
-d'une demi-LED.
+qui n'est pas esthétique mais **géométrique** — `maxDist − size/2 + √2/2`, soit
+ce qu'il faut pour qu'aucun coin de LED ne dépasse du hublot.
 
-### L'écart entre LEDs
+Le hublot lui-même est mesuré par son **cercle inscrit**, pas par sa boîte
+englobante : un hublot noirci n'est pas un cercle parfait — sur le (3) son rayon
+va de 93,3 à 100 px selon l'angle — et se caler sur le maximum le surestimait de
+6 %, ce qui faisait sortir les coins de LED dans les directions étroites, à
+certaines largeurs d'écran seulement.
 
-Il vient du profil et pas d'une constante partagée : les LEDs d'un (4a) Pro sont
-bien plus jointives que celles d'un (3), et les traiter pareil les rendait deux
-fois trop petites — un rendu qui *paraissait* flou alors qu'il était net au
-pixel. Aux tailles de référence : **2 px** d'écart pour le (3) (cellule 8, LED
-de 6), **3 px** pour le (4a) Pro (cellule 16, LED de 13).
+### La taille des LEDs
+
+C'est elle qu'on règle, pas l'écart : la cellule est imposée par la grille, donc
+agrandir la LED resserre l'écart d'autant. Elle vient du profil et pas d'une
+constante partagée — les LEDs d'un (4a) Pro sont bien plus jointives que celles
+d'un (3), et les traiter pareil les rendait deux fois trop petites, un rendu qui
+*paraissait* flou alors qu'il était net au pixel. Aux tailles de référence :
+LED de **6 px** pour le (3) (cellule 8), de **13 px** pour le (4a) Pro
+(cellule 16).
+
+En mode **grand**, la cellule fait deux à cinq fois sa taille du mode téléphone
+et la LED s'y perdrait au milieu du vide : elle y reprend donc un quart de
+l'écart. Ce mode ne prétend pas émuler l'appareil, il sert à lire LED par LED.
 
 L'écart ne dépend pas du style de rendu. Il décrit l'appareil, pas la façon de
 le regarder ; `sharp` et `soft` se distinguent par les angles, le halo et la
@@ -370,5 +383,6 @@ src/lib/ui/             Preview, Slider, Seg, Card, Wordmark, ThemeToggle
 src/App.svelte          rack de réglages et mise en page
 public/phone3-back.webp photo du dos, partagée avec glyphlapse / glyphslot
 ```
+
 
 

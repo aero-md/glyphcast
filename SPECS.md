@@ -79,8 +79,8 @@ de sa hauteur**.
 | Photo | `phone3-back.webp` | `phone4apro-back.webp` |
 | Cadre | 704 × 913 | 704 × 913 |
 | Corps dans le cadre | 98,3 % | 98,3 % |
-| Hublot — diamètre | 28,27 % | 34,66 % |
-| Hublot — centre | 79,69 % / 15,33 % | 68,82 % / 22,67 % |
+| Hublot — diamètre inscrit | 26,49 % | 33,66 % |
+| Hublot — centre | 79,62 % / 15,38 % | 68,96 % / 23,00 % |
 | Cerne (`margin`) | 1,5 LED | 1,5 LED |
 | Part de LED dans le pas (`duty`) | 0,72 | 13/16 |
 | Largeur de rendu (`frameWidth`) | 792 px | 739 px |
@@ -113,9 +113,27 @@ la photo — biseau du verre et reflets compris — qui sert de fond. Une photo 
 montrerait encore ses LEDs les laisserait transparaître entre les nôtres.
 
 Noircir un hublot change le diamètre qu'on en mesure : sur le (3), il est passé
-de 183,3 px (la seule zone de LEDs, visible sur la photo d'origine) à 199 px (le
-verre entier). Les cotes ci-dessus sont relevées sur les photos **après**
+de 183,3 px (la seule zone de LEDs, visible sur la photo d'origine) à ~199 px de
+boîte englobante. Les cotes ci-dessus sont relevées sur les photos **après**
 noircissement.
+
+#### Le hublot est mesuré par son cercle inscrit
+
+Un hublot noirci n'est pas un cercle parfait : sur le (3), son rayon va de
+**93,3 à 100 px** selon l'angle. La cote retenue est le **plus grand cercle
+inscrit** — centre et rayon cherchés ensemble pour maximiser le rayon minimal —
+et non la boîte englobante.
+
+Ce n'est pas de la précision gratuite. La boîte englobante donne le rayon
+**maximal** : elle surestimait le hublot du (3) de 6 %, la matrice était
+dimensionnée d'autant trop grand, et ses coins de LED sortaient du hublot dans
+les directions étroites. Le symptôme n'apparaissait qu'à certaines largeurs
+d'écran — celles où la quantification fait tomber le cerne sur son plancher —
+ce qui le rendait difficile à rattacher à sa cause.
+
+Corollaire : le cerne affiché se lit désormais contre le cercle inscrit, donc
+ses valeurs sont plus petites qu'avant à rendu identique. Ce n'est pas le rendu
+qui a changé, c'est la mesure qui a cessé de mentir.
 
 Le **cerne** est la bande sombre entre la découpe du hublot et la LED la plus
 proche. Aucune des deux matrices ne va jusqu'au bord, et l'ignorer donnait une
@@ -562,19 +580,24 @@ trancherait dedans.
 |---|---|---|
 | Forme | carré vif | angles adoucis, r = 24 % du côté |
 | Halo | `shadowBlur = cellule × 0,55 × b` | aucun |
-| Écart | `round(cellule × (1 − duty))` | le même **moins 1 px** |
+| Écart | `round(cellule × (1 − duty))` | identique |
 | Rampe alpha | `0,25 + 0,75 b` | `0,08 + 0,92 b` |
 | LED éteinte | `#1b1b20` | `#08080a` |
 | Fond du disque | `#08080a` | `#131316` |
 
-**`soft` retire un pixel d'écart**, pas une proportion. En `sharp`, le halo
-déborde de la LED et la fait paraître plus grosse qu'elle n'est ; `soft` n'en a
-pas, et ses LEDs se lisent d'autant plus petites. Un pixel rendu compense à peu
-près cette perte apparente.
+**La taille de LED ne dépend pas du style.** Elle décrit l'appareil, pas la
+façon de le regarder ; `sharp` et `soft` se distinguent par les angles, le halo
+et la rampe.
 
-Un pixel fixe et non un pourcentage, parce que c'est la compensation d'un effet
-qui ne dépend pas de la taille de cellule. L'effet relatif suit donc la finesse
-de la matrice : sur un (3) la LED passe de 6 à 7 px, sur un (4a) Pro de 13 à 14.
+**Elle dépend du mode.** En mode grand, la cellule fait deux à cinq fois sa
+taille du mode téléphone, et la LED, restée à la même proportion, s'y perd au
+milieu du vide. Ce mode ne prétend pas émuler l'appareil — il sert à lire LED par
+LED ce que fait un réglage — donc la LED y **reprend un quart de l'écart**. Le
+mode téléphone, lui, garde les proportions relevées sur la photo.
+
+Reprendre une part de l'écart plutôt qu'appliquer un facteur à la LED donne à
+chaque appareil ce qu'il a à gagner : le (3), plus aéré, récupère davantage que
+le (4a) Pro, déjà presque jointif.
 
 **L'écart n'est plus forcé pair.** Il l'était tant que la LED était centrée dans
 sa cellule — la marge tombait alors à la demie pour un écart impair, et un bord
@@ -603,11 +626,16 @@ Une cellule occupe un nombre **entier** de pixels de canvas, et la LED comme sa
 marge tombent sur des entiers :
 
 ```
-cerne(cellule) = (diamètre du hublot / cellule − size) / 2      en largeurs de LED
-ecart          = max(1, round(cellule × (1 − duty) × facteur de style))
-led            = max(2, cellule − ecart)
+cerne(cellule) = (diamètre inscrit / cellule − size) / 2        en largeurs de LED
+nominale       = cellule × duty
+led            = round(nominale + (grand ? (cellule − nominale) × 0,25 : 0))
+                 borné à [2, cellule − 1]
 marge          = ⌊(cellule − led) / 2⌋
 ```
+
+La grandeur réglée est la **LED**, pas l'écart : la cellule étant imposée par la
+grille, agrandir la LED resserre l'écart d'autant. L'écart n'est que ce qui
+reste.
 
 Un canvas de taille fixe redimensionné par le navigateur avec un ratio
 fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
@@ -643,10 +671,21 @@ de la consigne du profil. Arrondir la cellule ne revient pas au même — la
 relation entre les deux est en `1/cellule`, et l'écart part du mauvais côté une
 fois sur deux.
 
-Un plancher de **0,5 largeur de LED** borne le tout : quand la consigne tombe
-entre deux valeurs possibles, mieux vaut un cerne trop épais qu'un cerne absent.
-Il garantit du même coup que la grille rentre toujours dans le hublot, donc
-qu'aucune LED ne s'y fait rogner.
+Un **plancher** borne le tout, et il n'est pas esthétique mais géométrique :
+c'est ce qu'il faut pour qu'aucun coin de LED ne dépasse du hublot.
+
+```
+cerneMin = maxDist − size/2 + √2/2
+```
+
+`maxDist` est la distance au centre de la LED la plus excentrée. Ce n'est pas le
+rayon du masque : celui-ci teste le **centre** des cellules, si bien qu'une LED
+retenue est un peu en deçà du rayon nominal (12,369 au lieu de 12,5 sur une
+grille de 25) mais que son **coin** est plus loin d'une demi-diagonale. Comme la
+LED ne dépasse jamais sa cellule, ce surplus vaut au plus `√2/2`.
+
+Posé à 0,5 « pour qu'il reste un cerne », ce plancher laissait passer les coins
+des rangées extrêmes.
 
 **Ce que la quantification coûte.** Elle est d'autant plus rude que la cellule
 est petite, et c'est ce qui a fixé la largeur de cadre à 728 px : à 576, le

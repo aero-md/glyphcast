@@ -186,7 +186,10 @@
     const g = grid;
     if (cvs.width !== g.size) cvs.width = cvs.height = g.size;
     const ctx = cvs.getContext("2d");
-    if (ctx) paint(ctx, held && compare ? compare : frame, g, { style });
+    // LEDs agrandies en mode grand seulement : le mode téléphone garde les
+    // proportions relevées sur la photo
+    if (ctx)
+      paint(ctx, held && compare ? compare : frame, g, { style, grand: mode === "large" });
   });
 
   function hold(on: boolean) {

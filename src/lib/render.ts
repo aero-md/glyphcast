@@ -39,12 +39,21 @@ export type Grid = {
  * deux appareils ne fait.
  */
 /**
- * Le cerne minimal qu'on s'autorise, en largeurs de LED. La cellule étant
- * entière, le cerne ne prend que des valeurs discrètes ; quand la consigne
- * tombe entre deux, mieux vaut un cerne trop épais qu'un cerne absent — sans
- * lui la matrice touche sa découpe, ce qu'aucun appareil ne fait.
+ * Cerne minimal d'un appareil, en largeurs de LED. Ce n'est pas un choix
+ * esthétique mais une **borne géométrique** : c'est ce qu'il faut pour qu'aucun
+ * coin de LED ne dépasse du hublot.
+ *
+ * Le masque teste le **centre** des cellules, donc la plus excentrée est à
+ * `maxDist` du centre, un peu en deçà du rayon nominal — mais son coin, lui, est
+ * plus loin d'une demi-diagonale. Comme la LED ne dépasse jamais la cellule, ce
+ * surplus vaut au plus `√2 / 2`.
+ *
+ * Posé à 0,5 « pour qu'il reste un cerne », il laissait les coins des rangées
+ * extrêmes sortir du hublot à certaines largeurs d'écran — le symptôme
+ * n'apparaissait que sur les résolutions où la quantification fait tomber le
+ * cerne sur son plancher.
  */
-const CERNE_MIN = 0.5;
+const cerneMin = (d: Device) => d.maxDist - d.size / 2 + Math.SQRT1_2;
 
 function cellFor(d: Device, discPx: number): number {
   // Le cerne vaut `(discPx / cell − size) / 2` : on choisit donc la cellule dont
@@ -54,9 +63,9 @@ function cellFor(d: Device, discPx: number): number {
   // côté une fois sur deux.
   const cerne = (cell: number) => (discPx / cell - d.size) / 2;
 
-  // Plafond : la cellule doit laisser au moins CERNE_MIN, ce qui borne du même
-  // coup la grille à ce qui rentre dans le disque.
-  const tient = Math.max(1, Math.floor(discPx / (d.size + 2 * CERNE_MIN)));
+  // Plafond : la cellule doit laisser au moins le cerne minimal, ce qui borne du
+  // même coup la grille à ce qui rentre dans le hublot.
+  const tient = Math.max(1, Math.floor(discPx / (d.size + 2 * cerneMin(d))));
   const ideal = discPx / (d.size + 2 * d.margin);
 
   const bas = Math.max(1, Math.min(Math.floor(ideal), tient));
@@ -110,6 +119,11 @@ export type PaintOpts = {
   style?: LedStyle;
   /** Peint le fond du disque (nécessaire pour un PNG autonome). */
   background?: string | null;
+  /**
+   * Rendu du disque en grand : la LED y reprend une part de l'écart, sans quoi
+   * elle se perd au milieu du vide — voir `ledMetrics`.
+   */
+  grand?: boolean;
 };
 
 const ON = "242,242,239"; // blanc légèrement chaud des LEDs Nothing
@@ -122,28 +136,38 @@ const OFF: Record<LedStyle, string> = { sharp: "#1b1b20", soft: "#08080a" };
 /**
  * Côté de la LED et marge dans sa cellule.
  *
- * L'écart entre deux LEDs vient du profil (`duty`, la part du pas occupée par
- * la LED) et non d'une constante partagée : le (4a) Pro a des LEDs bien plus
- * jointives que le (3), et les traiter pareil les rendait deux fois trop
- * petites.
+ * La grandeur réglée est la **LED**, pas l'écart : la cellule est imposée par la
+ * grille, donc agrandir la LED resserre l'écart d'autant. `duty` — la part du
+ * pas qu'occupe la LED — vient du profil et non d'une constante partagée : le
+ * (4a) Pro a des LEDs bien plus jointives que le (3), et les traiter pareil les
+ * rendait deux fois trop petites.
  *
- * `soft` retire **un pixel** d'écart, pas une proportion. En `sharp`, le halo
- * déborde de la LED et la fait paraître plus grosse qu'elle n'est ; `soft` n'en
- * a pas, et ses LEDs se lisent d'autant plus petites. Un pixel rendu compense à
- * peu près cette perte apparente.
+ * Le **style** n'entre pas dans le calcul : la taille de LED décrit l'appareil,
+ * pas la façon de le regarder.
  *
- * Un pixel fixe et non un pourcentage, parce que c'est la compensation d'un
- * effet qui ne dépend pas de la taille de cellule. L'effet relatif suit donc la
- * finesse de la matrice : nettement visible sur une cellule de 8 px, à peine sur
- * une de 16.
+ * Le **mode**, si. En mode grand la cellule fait deux à cinq fois sa taille du
+ * mode téléphone, et la LED, restée à la même proportion, s'y perd au milieu du
+ * vide. Or ce mode ne prétend pas émuler l'appareil — il sert à lire LED par LED
+ * ce que fait un réglage — donc la LED y **reprend un quart de l'écart**. Le
+ * mode téléphone, lui, garde les proportions relevées sur la photo.
+ *
+ * Reprendre une part de l'écart plutôt qu'appliquer un facteur à la LED donne à
+ * chaque appareil ce qu'il a à gagner : le (3), plus aéré, récupère davantage
+ * que le (4a) Pro, déjà presque jointif.
  */
+const REPRISE = 0.25;
+
 export function ledMetrics(
   cell: number,
-  style: LedStyle,
   duty: number,
+  grand = false,
 ): { led: number; pad: number } {
-  const gap = Math.max(1, Math.round(cell * (1 - duty)) - (style === "soft" ? 1 : 0));
-  const led = Math.max(2, cell - gap);
+  const nominale = cell * duty;
+  // au moins 1 px d'écart : deux LEDs jointives ne se distinguent plus
+  const led = Math.min(
+    cell - 1,
+    Math.max(2, Math.round(nominale + (grand ? (cell - nominale) * REPRISE : 0))),
+  );
   /* Marge **plancher** et non moitié exacte : c'est ce qui autorise un écart
      impair. Centrer la LED dans sa cellule imposerait une marge à la demie et
      donc un bord flou à chaque cellule, ce qui bornait l'écart aux valeurs
@@ -159,9 +183,9 @@ export function paint(
   g: Grid,
   opts: PaintOpts = {},
 ): void {
-  const { style = "sharp", background = null } = opts;
+  const { style = "sharp", background = null, grand = false } = opts;
   const { size, inside, duty } = frame.device;
-  const { led, pad } = ledMetrics(g.cell, style, duty);
+  const { led, pad } = ledMetrics(g.cell, duty, grand);
   const radius = style === "soft" ? led * 0.24 : 0;
   const rounded = radius > 0.5 && typeof ctx.roundRect === "function";
 

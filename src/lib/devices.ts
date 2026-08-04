@@ -90,16 +90,19 @@ const PHONE3: Device = {
   name: "Nothing Phone (3)",
   ref: "(3)",
   aspect: 704 / 913,
-  // 792 px → hublot de 223,9, soit 28 cellules de 8 px : 25 LEDs et une LED et
-  // demie de cerne de chaque côté. La LED y fait 6 px de côté.
+  // 792 px → hublot inscrit de 209,8, où la cellule de 8 px est la plus grande
+  // qui laisse encore ses coins de LED à l'intérieur. La LED y fait 6 px.
   frameWidth: 792,
   photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)" },
-  /* Relevé sur la photo au hublot noirci : disque de 199 px centré en
-     (561 ; 140) dans un cadre de 704 × 913. C'est le **verre entier**, biseau
-     compris, et non la seule zone de LEDs que mesurait le relevé d'origine
-     (183,3 px) — d'où un diamètre plus grand et une consigne de cerne plus
-     large pour le même rendu. */
-  disc: { left: 0.7969, top: 0.1533, pct: 0.2827 },
+  /* Meilleur **cercle inscrit** dans le hublot noirci : rayon 93,3 px centré en
+     (560,5 ; 140,5) dans un cadre de 704 × 913.
+
+     Inscrit et non englobant. Le hublot n'est pas un cercle parfait — son rayon
+     va de 93,3 à 100 px selon l'angle — et le relevé précédent, pris sur la
+     boîte englobante, le surestimait donc de 6 %. La matrice était dimensionnée
+     d'autant trop grand et ses coins sortaient du hublot dans les directions
+     étroites, à certaines largeurs d'écran seulement. */
+  disc: { left: 0.7962, top: 0.1538, pct: 0.2649 },
   /* Une LED et demie. Le relevé du verre entier en suggérait deux, mais à
      l'écran deux cellules de cerne mangent la matrice — elle rend plus petit et
      moins net que l'appareil, pour un bord qui ne se lit pas mieux. Une seule
@@ -129,12 +132,13 @@ const PHONE4A_PRO: Device = {
   name: "Nothing Phone (4a) Pro",
   ref: "(4a) Pro",
   aspect: 704 / 913,
-  // 739 px → hublot de 256,1, soit 16 cellules de 16 px : 13 LEDs et une LED et
-  // demie de cerne. La LED y fait 13 px de côté pour 3 d'écart.
+  // 739 px → hublot inscrit de 248,7, soit une cellule de 16 px. La LED y fait
+  // 13 px de côté pour 3 d'écart.
   frameWidth: 739,
   photo: { src: "/phone4apro-back.webp", alt: "Dos d'un Nothing Phone (4a) Pro" },
-  // relevé sur la photo au hublot noirci : disque de 244 px centré en (484,5 ; 207)
-  disc: { left: 0.6882, top: 0.2267, pct: 0.3466 },
+  // meilleur cercle inscrit dans le hublot noirci : rayon 118,5 px centré en
+  // (485,5 ; 210). Inscrit et non englobant, pour la même raison que le (3).
+  disc: { left: 0.6896, top: 0.23, pct: 0.3366 },
   /* Relevé sur la photo d'origine, avant noircissement : pas de 18,67 px dans
      un hublot de 300 (source 2048²). Le champ de LEDs fait donc
      13 × 18,67 = 242,7 px, et le cerne (300 − 242,7)/2 = 28,6 px, soit 1,53

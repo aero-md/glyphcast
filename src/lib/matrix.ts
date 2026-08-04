@@ -30,6 +30,16 @@ export type Geometry = {
   isInside: Uint8Array;
   /** Nombre de LEDs pilotables. Calculé, jamais écrit en dur. */
   ledCount: number;
+  /**
+   * Distance au centre de la LED la plus excentrée, en cellules.
+   *
+   * Ce n'est pas `radius` : le masque teste le **centre** des cellules, si bien
+   * qu'une LED retenue déborde du cercle nominal de presque une demi-diagonale.
+   * Sur une grille de 13 la plus lointaine est à 6,403 et non 6,5 ; sur une de
+   * 25, à 12,369 et non 12,5. C'est cette valeur qui dit quel cerne minimal
+   * garde tous les coins de LED à l'intérieur du hublot.
+   */
+  maxDist: number;
   /** Facteur de supersampling : chaque LED intègre `ss × ss` pixels source. */
   ss: number;
   /** Côté du canvas d'échantillonnage, `size × ss`. */
@@ -51,13 +61,16 @@ export function buildGeometry(size: number, radius = size / 2): Geometry {
 
   const inside: number[] = [];
   const isInside = new Uint8Array(cells);
+  let maxDist = 0;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
-      if (Math.hypot(x - cx, y - cy) < radius) {
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < radius) {
         inside.push(i);
         isInside[i] = 1;
+        if (d > maxDist) maxDist = d;
       }
     }
   }
@@ -73,6 +86,7 @@ export function buildGeometry(size: number, radius = size / 2): Geometry {
     inside,
     isInside,
     ledCount: inside.length,
+    maxDist,
     ss,
     sample: size * ss,
   };
