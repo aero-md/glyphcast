@@ -53,6 +53,7 @@ un pipeline unique.
 | Centre | (12, 12) | (6, 6) | `((size − 1)/2)` sur les deux axes |
 | `radius` | 12,5 | 6,5 | masque circulaire, `dist < radius` |
 | `ledCount` | **489** | **137** | calculé, jamais écrit en dur |
+| `maxDist` | 12,369 | 6,403 | LED la plus excentrée, en cellules |
 | `ss` | 8 | 15 | échantillons par LED et par axe |
 | `sample` | 200 | 195 | côté du canvas d'échantillonnage |
 | Profondeur | 0-255 par LED | idem | consigne du Glyph Matrix SDK |
@@ -78,9 +79,20 @@ de sa hauteur**.
 | Photo | `phone3-back.webp` | `phone4apro-back.webp` |
 | Cadre | 704 × 913 | 704 × 913 |
 | Corps dans le cadre | 98,3 % | 98,3 % |
-| Disque — diamètre | 26,04 % | 35,01 % |
-| Disque — centre | 79,53 % / 15,36 % | 68,67 % / 22,67 % |
+| Hublot — diamètre | 26,04 % | 35,01 % |
+| Hublot — centre | 79,53 % / 15,36 % | 68,67 % / 22,67 % |
+| Cerne (`margin`) | 1 LED | 1,5 LED |
 | Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
+
+Le **cerne** est la bande sombre entre la découpe du hublot et la LED la plus
+proche. Aucune des deux matrices ne va jusqu'au bord, et l'ignorer donnait une
+grille qui touche sa découpe — ce qu'aucun appareil ne fait. Il est exprimé en
+**largeurs de LED** : en pixels d'écran il mentirait dès que la préview change
+de taille, alors qu'en largeurs de LED il reste juste partout et le hublot vaut
+simplement `size + 2 × margin` cellules.
+
+Les deux valeurs sont relevées sur les photos : première LED à ~6,8 px d'un
+hublot de 183,3 px sur le (3), à ~24 px d'un hublot de 246,5 px sur le (4a) Pro.
 
 #### Le même gabarit pour les deux
 
@@ -514,27 +526,66 @@ Une cellule occupe un nombre **entier** de pixels de canvas, et le gap est
 forcé pair pour que la marge reste entière :
 
 ```
-cellule = max(3, ⌊px CSS visés × devicePixelRatio + 1/size⌋)
-demiGap = max(1, round(cellule × ratio du style))
-led     = max(2, cellule − 2 × demiGap)
+cerne(cellule) = (diamètre du hublot / cellule − size) / 2      en largeurs de LED
+demiGap        = max(1, round(cellule × ratio du style))
+led            = max(2, cellule − 2 × demiGap)
 ```
 
 Un canvas de taille fixe redimensionné par le navigateur avec un ratio
 fractionnaire produit une trame irrégulière : une colonne sur n gagne un pixel
 de gap. La taille CSS du canvas est donc dérivée du backing (`size / dpr`),
-ratio exactement 1.
+ratio exactement 1, et **le canvas est centré dans le hublot, jamais étiré**.
 
-**Plancher et non arrondi.** Arrondie au supérieur, la grille déborde du disque
-qui l'étire — et c'est précisément la trame irrégulière qu'on cherche à éviter.
-La tolérance de `1/size` vaut un pixel de débord sur toute la grille, que le
-disque absorbe sans que ça se voie ; sans elle, un diamètre relevé au
-dix-millième coûte une cellule entière — sur un Phone (3) à 576 px,
-`0,2604 × 576 / 25` vaut 5,9996 et la matrice retombait à 5 px par LED.
+**Le choix de la cellule se fait sur le cerne, pas sur la taille.** La cellule
+étant entière, le cerne ne prend que des valeurs discrètes ; on retient donc,
+des deux entiers qui encadrent l'idéal, celui dont le cerne tombe le plus près
+de la consigne du profil. Arrondir la cellule ne revient pas au même — la
+relation entre les deux est en `1/cellule`, et l'écart part du mauvais côté une
+fois sur deux.
 
-**Le canvas est centré dans le disque, pas étiré à 100 %.** Sa taille est un
-multiple entier de la cellule, donc rarement le diamètre exact du disque. Ce qui
-reste — au pire quelques pixels de fond au pourtour — est ce qu'on voit sur
-l'appareil : un cerne entre la dernière LED et le bord.
+Un plancher de **0,5 largeur de LED** borne le tout : quand la consigne tombe
+entre deux valeurs possibles, mieux vaut un cerne trop épais qu'un cerne absent.
+Il garantit du même coup que la grille rentre toujours dans le hublot, donc
+qu'aucune LED ne s'y fait rogner.
+
+**Ce que la quantification coûte.** Elle est d'autant plus rude que la cellule
+est petite. Sur les largeurs de colonne utiles (300 → 576 px), cerne médian
+obtenu :
+
+| | consigne | dpr 1 | dpr 2 | dpr 3 |
+|---|---:|---:|---:|---:|
+| Phone (3) | 1 | 2,00 | 1,21 | 1,02 |
+| Phone (4a) Pro | 1,5 | 1,47 | 1,50 | 1,50 |
+
+Le (4a) Pro tombe juste partout : 13 LEDs dans un hublot large, la cellule est
+grosse et le pas fin. Le (3) n'y arrive qu'à partir de dpr 2 — à 576 px et
+dpr 1, ses 25 LEDs tiennent dans 150 px, soit 5 px chacune, et le cerne ne peut
+alors valoir que 2,5 LEDs ou zéro. Il n'y a pas de 1 à cette résolution ; le
+plancher fait retenir 2,5.
+
+#### L'aplat qui masque la photo
+
+En mode téléphone, le fond sombre du disque ne fait **pas** le diamètre du
+hublot. Il ne couvre que le champ de LEDs : le cerne de la photo porte le biseau
+du verre et ses reflets, et l'aplatir sous du noir uni supprimait le seul détail
+qui donne au rendu l'air d'être posé sur l'appareil plutôt que collé dessus.
+
+Son diamètre est le plus grand de deux exigences, plafonné au hublot :
+
+| Contrainte | Ce qu'elle impose |
+|---|---|
+| Champ de la photo | couvrir les LEDs de la photo — cote **idéale**, non quantifiée, pour ne pas bouger avec l'arrondi de la cellule |
+| Enveloppe des LEDs | contenir toutes nos LEDs, coins compris : `2 × (maxDist + √2/2) × cellule` |
+
+`maxDist` n'est pas le rayon du masque. Celui-ci teste le **centre** des
+cellules, si bien qu'une LED retenue déborde du cercle nominal de presque une
+demi-diagonale : sur une grille de 13, la plus lointaine est à 6,403 cellules et
+non 6,5. Dimensionner l'aplat sur 6,5 rognait les LEDs des rangées extrêmes.
+
+**Aucune LED ne doit jamais être rognée par ce cercle.** L'enveloppe le garantit
+par le calcul ; `overflow: visible` le garantit une seconde fois, quoi qu'il
+arrive à l'arrondi. Une LED qui dépasse est un défaut mineur, une LED coupée est
+une matrice qui ment sur son contenu.
 
 #### Calage sur le dos
 

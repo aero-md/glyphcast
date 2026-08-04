@@ -92,15 +92,12 @@
     mode === "phone" ? Math.min(Math.round(size * previewBand(dev)), cap) : discSize,
   );
 
-  /* Mode téléphone : la cellule suit le diamètre réellement affiché, pas une
-     valeur figée — sur colonne étroite la trame deviendrait irrégulière, et le
-     rapport change d'un appareil à l'autre. Mode grand : la plus grande cellule
-     entière qui tient dans le cadre, un pas fractionnaire élargirait une colonne
-     sur n. */
+  /* Les deux modes ne diffèrent que par le diamètre offert au disque : celui
+     relevé sur la photo, ou toute la place de la colonne. La grille et le cerne
+     s'en déduisent — la cellule suit le diamètre réellement affiché et jamais une
+     valeur figée, sinon la trame devient irrégulière sur colonne étroite. */
   const grid = $derived<Grid>(
-    mode === "phone"
-      ? screenGrid(dev, (size * dev.disc.pct) / dev.size, dpr)
-      : screenGrid(dev, Math.max(6, Math.floor(discSize / dev.size)), dpr),
+    screenGrid(dev, mode === "phone" ? size * dev.disc.pct : discSize, dpr),
   );
 
   /* Si la préview ne rentre pas en hauteur, le cadre la rogne **par le bas**
@@ -109,7 +106,7 @@
      dos, décoratifs. D'où l'alignement en haut du cadre — un centrage rognerait
      des deux côtés et mangerait la matrice. */
   let stageH = $state(0);
-  const naturalH = $derived(mode === "phone" ? size / dev.aspect : grid.cssSize);
+  const naturalH = $derived(mode === "phone" ? size / dev.aspect : grid.discCss);
   /* deux pixels de mou : les deux hauteurs s'égalisent pile quand ça rentre, et
      l'arrondi à l'entier ferait apparaître le fondu sur un cheveu */
   const clipped = $derived(stageH > 0 && naturalH - stageH > 2);
@@ -150,7 +147,15 @@
       <div class="phone" style="width:{size}px;aspect-ratio:{dev.aspect}">
         <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
-        <div class="disc" style="{at(dev.disc)};background:{DISC_BG[style]}">
+        <!-- L'aplat ne fait pas le diamètre du hublot mais celui du champ de
+             LEDs : il masque la matrice de la photo et rien de plus. Le cerne
+             visible autour est celui de la photo, biseau et reflets compris. -->
+        <div
+          class="disc"
+          style="left:{dev.disc.left * 100}%;top:{dev.disc.top * 100}%;width:{grid.fieldCss}px;height:{grid.fieldCss}px;background:{DISC_BG[
+            style
+          ]}"
+        >
           <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
           ></canvas>
         </div>
@@ -179,9 +184,10 @@
         {/if}
       </div>
     {:else}
+      <!-- le disque, cerne compris : le canvas ne porte que les LEDs -->
       <div
         class="disc big"
-        style="width:{grid.cssSize}px;height:{grid.cssSize}px;background:{DISC_BG[style]}"
+        style="width:{grid.discCss}px;height:{grid.discCss}px;background:{DISC_BG[style]}"
       >
         <canvas bind:this={cvs} style="width:{grid.cssSize}px;height:{grid.cssSize}px"
         ></canvas>
@@ -268,22 +274,28 @@
 
   /* la couleur de fond vient du style de LED, posée en inline */
   /* Le canvas est centré au lieu d'être étiré à 100 % : sa taille est un
-     multiple entier de la cellule, donc rarement le diamètre exact du disque.
+     multiple entier de la cellule, donc rarement le diamètre exact de l'aplat.
      L'étirer redonnerait la trame irrégulière que le calcul en pixels entiers
-     évite. Ce qui reste — au pire quelques pixels de fond au pourtour — est ce
-     qu'on voit sur l'appareil : un cerne entre la dernière LED et le bord. */
+     évite.
+
+     `overflow: visible` est un garde-fou, pas un oubli : le `border-radius`
+     découpe le fond en disque, mais **aucune LED ne doit jamais être rognée par
+     ce cercle**. Le masque de la matrice teste le centre des cellules, si bien
+     que les LEDs des rangées extrêmes débordent du rayon nominal — sous
+     `overflow: hidden` elles se faisaient trancher. L'aplat est dimensionné
+     pour les contenir (voir `enveloppe`), et si un arrondi le prenait en
+     défaut, la LED dépasse plutôt que de disparaître. */
   .disc {
     border-radius: 50%;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  /* position et diamètre posés en ligne depuis le profil */
+  /* position posée en ligne depuis le profil, diamètre depuis la grille */
   .phone .disc {
     position: absolute;
-    aspect-ratio: 1;
     transform: translate(-50%, -50%);
   }
 

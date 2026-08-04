@@ -38,11 +38,13 @@ function fileName(d: Device, suffix: string, ext: string): string {
 
 /* -------------------------------------------------------------------------- */
 
-/** PNG carré du disque, ~600 px de côté, dans le style affiché. */
+/** PNG carré du disque, ~600 px de côté, cerne compris, dans le style affiché. */
 export async function exportPng(frame: Frame, style: LedStyle = "sharp"): Promise<void> {
   const g = exportGrid(frame.device);
   const cvs = document.createElement("canvas");
-  cvs.width = cvs.height = g.size;
+  // le disque et non la grille : le PNG doit porter le cerne, sinon il ne montre
+  // pas la même chose que la préview
+  cvs.width = cvs.height = g.disc;
   paint(cvs.getContext("2d")!, frame, g, { style, background: DISC_BG[style] });
   const blob = await new Promise<Blob | null>((r) => cvs.toBlob(r, "image/png"));
   if (blob) download(blob, fileName(frame.device, style, "png"));

@@ -35,6 +35,16 @@ export type Device = Geometry & {
   photo: { src: string; alt: string };
   disc: Disc;
   /**
+   * Cerne entre la découpe de la matrice et la LED la plus proche, **en
+   * largeurs de LED**. Aucun des deux appareils ne va jusqu'au bord : il reste
+   * une bande noire, et l'ignorer donnait une matrice qui déborde de sa fenêtre.
+   *
+   * L'unité n'est pas anodine — exprimé en pixels d'écran, le cerne mentirait
+   * dès que la préview change de taille. En largeurs de LED il reste juste
+   * partout, et le disque vaut simplement `size + 2 × margin` cellules.
+   */
+  margin: number;
+  /**
    * Glyph Button — c'est lui qui porte l'A/B « maintenir pour comparer ».
    * Absent quand l'appareil n'en a pas : la comparaison bascule alors sur le
    * bouton en barre sous la préview, celui du mode « grand ».
@@ -52,6 +62,9 @@ const PHONE3: Device = {
   aspect: 704 / 913,
   photo: { src: "/phone3-back.webp", alt: "Dos d'un Nothing Phone (3)" },
   disc: { left: 0.7953, top: 0.1536, pct: 0.2604 },
+  // relevé sur la photo : première LED à ~6,8 px d'un hublot de 183,3 px, soit
+  // une largeur de LED tout juste
+  margin: 1,
   button: { left: 0.8453, top: 0.7482, pct: 0.1586 },
 };
 
@@ -75,6 +88,8 @@ const PHONE4A_PRO: Device = {
   aspect: 704 / 913,
   photo: { src: "/phone4apro-back.webp", alt: "Dos d'un Nothing Phone (4a) Pro" },
   disc: { left: 0.6867, top: 0.2267, pct: 0.3501 },
+  // relevé sur la photo : première LED à ~24 px d'un hublot de 246,5 px
+  margin: 1.5,
 };
 
 export const DEVICES: Device[] = [PHONE3, PHONE4A_PRO];

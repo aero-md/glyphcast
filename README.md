@@ -71,6 +71,7 @@ seul pipeline.
 | Grille | 25 × 25 = 625 cellules | 13 × 13 = 169 cellules |
 | Masque | disque (12, 12), r = 12,5 | disque (6, 6), r = 6,5 |
 | LEDs pilotables | **489** | **137** |
+| Cerne au bord du hublot | 1 LED | 1,5 LED |
 | Diamètre du disque | 26,49 % de la largeur du corps | 35,62 % — 34 % de plus |
 | Glyph Button | oui | **non** |
 | Couleur | aucune — luminosité seule, 0-255 par LED | idem |
@@ -187,10 +188,27 @@ deux fois plus large.
 Dans les deux cas une cellule occupe un nombre **entier** de pixels de canvas :
 un canvas redimensionné par le navigateur avec un ratio fractionnaire donne
 une trame irrégulière, une colonne sur n gagne un pixel de gap. La grille est
-donc calculée depuis le `devicePixelRatio`, au **plancher** — arrondie au
-supérieur elle déborde du disque, qui l'étire, et on retombe sur la trame
-irrégulière. Le canvas est centré dans le disque plutôt qu'étiré à 100 % ; le
-cerne de fond qui reste au pourtour est ce qu'on voit sur l'appareil.
+donc calculée depuis le `devicePixelRatio`, et le canvas centré dans le hublot
+plutôt qu'étiré à 100 %.
+
+### Le cerne
+
+Aucune des deux matrices ne va jusqu'au bord de son hublot : il reste une bande
+sombre entre la découpe et la première LED, relevée sur les photos à 1 largeur
+de LED sur le (3) et 1,5 sur le (4a) Pro. C'est l'unité qui compte — en pixels
+d'écran, le cerne mentirait dès que la préview change de taille.
+
+La cellule étant entière, le cerne ne prend que des valeurs discrètes : on
+retient celle dont le cerne tombe le plus près de la consigne, avec un plancher
+d'une demi-LED. Ça marche bien sur le (4a) Pro à toutes les densités ; sur le (3)
+il faut un écran en dpr ≥ 2, ses 25 LEDs ne tenant qu'en 5 px chacune à 576 px.
+
+Le fond sombre ne couvre que le champ de LEDs, pas tout le hublot : le cerne de
+la photo porte le biseau du verre et ses reflets, et l'aplatir sous du noir uni
+enlevait le seul détail qui pose le rendu sur l'appareil au lieu de le coller
+dessus. Il est dimensionné pour contenir toutes les LEDs coins compris — le
+masque teste le centre des cellules, donc les LEDs des rangées extrêmes
+débordent du rayon nominal, et **aucune ne doit jamais être rognée**.
 
 ### Rendu des LED : sharp / soft
 

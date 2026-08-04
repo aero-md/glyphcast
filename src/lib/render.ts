@@ -18,46 +18,107 @@ import type { Frame } from "./pipeline";
 export type Grid = {
   /** Pixels de backing par LED — toujours entier. */
   cell: number;
-  /** Côté du canvas en pixels de backing. */
+  /** Côté du carré de LEDs, en pixels de backing. */
   size: number;
   /** Côté correspondant en pixels CSS — ratio backing/CSS exactement 1. */
   cssSize: number;
+  /** Diamètre du disque, cerne compris, en pixels de backing. */
+  disc: number;
+  /** Le même en pixels CSS. */
+  discCss: number;
+  /**
+   * Diamètre, en px CSS, de l'aplat qui masque la matrice de la photo.
+   *
+   * Il couvre le **champ de LEDs** et lui seul, pas tout le hublot : le cerne de
+   * la photo porte le biseau du verre et ses reflets, et l'aplatir sous du noir
+   * uni supprimait le seul détail qui donne au rendu l'air d'être posé sur
+   * l'appareil plutôt que collé dessus.
+   */
+  fieldCss: number;
 };
 
 /**
- * Grille pour un affichage écran, calibrée sur `cellCss` px CSS par LED.
- * Sur un Phone (3), 6 px CSS × 25 = 150 px, soit le diamètre réel de la matrice
- * quand le téléphone est rendu à 576 px de large (26,04 % du cadre photo).
+ * Une matrice ne va pas jusqu'au bord de sa fenêtre : il reste un cerne noir
+ * entre la dernière LED et la découpe. Sa largeur est portée par le profil, en
+ * **largeurs de LED** — c'est l'unité dans laquelle l'œil le lit, et la seule
+ * qui reste vraie à toutes les tailles d'affichage.
+ *
+ * Le disque vaut donc `size + 2 × margin` cellules, et c'est de là que se déduit
+ * la taille de cellule : sans ça la grille touchait la découpe, ce qu'aucun des
+ * deux appareils ne fait.
  */
-export function screenGrid(
-  d: Device,
-  cellCss = 6,
-  dpr = window.devicePixelRatio || 1,
-): Grid {
-  // Plancher et non arrondi : la grille doit **tenir** dans la place demandée.
-  // Arrondie au supérieur elle déborde du disque, qui l'étire alors d'un facteur
-  // non entier — et une trame étirée élargit une colonne sur n, exactement ce
-  // que le calcul en pixels entiers cherche à éviter.
-  //
-  // La tolérance de `1 / size` vaut un pixel de débord **sur toute la grille**,
-  // que le disque absorbe sans que ça se voie. Sans elle, un diamètre relevé au
-  // dix-millième coûte une cellule entière : sur un Phone (3) à 576 px,
-  // 0,2604 × 576 / 25 donne 5,9996 et la matrice retombait à 5 px par LED.
-  const cell = Math.max(3, Math.floor(cellCss * dpr + 1 / d.size));
+/**
+ * Le cerne minimal qu'on s'autorise, en largeurs de LED. La cellule étant
+ * entière, le cerne ne prend que des valeurs discrètes ; quand la consigne
+ * tombe entre deux, mieux vaut un cerne trop épais qu'un cerne absent — sans
+ * lui la matrice touche sa découpe, ce qu'aucun appareil ne fait.
+ */
+const CERNE_MIN = 0.5;
+
+function cellFor(d: Device, discPx: number): number {
+  // Le cerne vaut `(discPx / cell − size) / 2` : on choisit donc la cellule dont
+  // le cerne tombe le plus près de la consigne, et non celle qui approche le
+  // mieux la taille idéale. Ce n'est pas la même chose — la relation entre les
+  // deux est en 1/cell, et arrondir la cellule fait partir l'écart du mauvais
+  // côté une fois sur deux.
+  const cerne = (cell: number) => (discPx / cell - d.size) / 2;
+
+  // Plafond : la cellule doit laisser au moins CERNE_MIN, ce qui borne du même
+  // coup la grille à ce qui rentre dans le disque.
+  const tient = Math.max(1, Math.floor(discPx / (d.size + 2 * CERNE_MIN)));
+  const ideal = discPx / (d.size + 2 * d.margin);
+
+  const bas = Math.max(1, Math.min(Math.floor(ideal), tient));
+  const haut = Math.max(1, Math.min(Math.ceil(ideal), tient));
+  const ecart = (cell: number) => Math.abs(cerne(cell) - d.margin);
+  return ecart(haut) < ecart(bas) ? haut : bas;
+}
+
+function grid(d: Device, cell: number, dpr: number, discPx = 0): Grid {
   const size = d.size * cell;
-  return { cell, size, cssSize: size / dpr };
+  const disc = (d.size + 2 * d.margin) * cell;
+
+  /* Le champ de LEDs de la photo, à la cote **idéale** et non quantifiée : c'est
+     lui qu'on masque, et il ne doit pas bouger avec l'arrondi de la cellule.
+     Deux pixels de mou pour couvrir la dernière rangée de la photo à coup sûr. */
+  const champ = discPx ? (discPx * d.size) / (d.size + 2 * d.margin) + 2 * dpr : disc;
+
+  /* Enveloppe : le plus petit disque qui contient vraiment toutes les LEDs,
+     coins compris. Le masque teste le centre des cellules, donc la LED la plus
+     excentrée déborde du rayon nominal — d'où `maxDist` et la demi-diagonale
+     d'une cellule. L'aplat ne descend jamais en dessous, sinon il laisse
+     transparaître les LEDs de la photo entre les nôtres. */
+  const enveloppe = 2 * (d.maxDist + Math.SQRT1_2) * cell;
+
+  // ...mais jamais au-delà du hublot : le déborder reviendrait à recouvrir le
+  // biseau de la photo, ce que tout ce calcul cherche justement à éviter.
+  const field = Math.min(discPx || disc, Math.max(champ, enveloppe));
+
+  return { cell, size, cssSize: size / dpr, disc, discCss: disc / dpr, fieldCss: field / dpr };
 }
 
 /**
- * Grille pour un export PNG, calée sur un côté visé plutôt que sur un nombre de
- * pixels par LED : les deux appareils sortent des fichiers de même encombrement,
- * et c'est la finesse de la matrice qui fait la différence, pas la taille du
- * PNG. 600 px → 24 px/LED sur le (3), 46 px/LED sur le (4a) Pro.
+ * Grille pour un affichage écran, tenant dans un disque de `discCss` px CSS.
+ * Sur un Phone (3) rendu à 576 px de large, le disque fait 150 px (26,04 % du
+ * cadre) pour 25 LEDs et deux cellules de cerne de chaque côté.
+ */
+export function screenGrid(
+  d: Device,
+  discCss: number,
+  dpr = window.devicePixelRatio || 1,
+): Grid {
+  const discPx = discCss * dpr;
+  return grid(d, cellFor(d, discPx), dpr, discPx);
+}
+
+/**
+ * Grille pour un export PNG, calée sur un diamètre visé plutôt que sur un nombre
+ * de pixels par LED : les deux appareils sortent des fichiers de même
+ * encombrement, et c'est la finesse de la matrice qui fait la différence, pas la
+ * taille du PNG.
  */
 export function exportGrid(d: Device, target = 600): Grid {
-  const cell = Math.max(1, Math.round(target / d.size));
-  const size = d.size * cell;
-  return { cell, size, cssSize: size };
+  return grid(d, cellFor(d, target), 1);
 }
 
 /**
@@ -107,11 +168,18 @@ export function paint(
   const radius = style === "soft" ? led * 0.24 : 0;
   const rounded = radius > 0.5 && typeof ctx.roundRect === "function";
 
-  ctx.clearRect(0, 0, g.size, g.size);
+  /* La grille est centrée dans le canvas qu'on lui donne, quel qu'il soit :
+     `g.size` à l'écran, où le cerne est peint par le disque en CSS, et `g.disc`
+     à l'export, où le PNG doit être autonome. Un seul chemin de rendu pour les
+     deux, et rien à recalculer côté appelant. */
+  const W = ctx.canvas.width;
+  const o = (W - g.size) / 2;
+
+  ctx.clearRect(0, 0, W, ctx.canvas.height);
   if (background) {
     ctx.save();
     ctx.beginPath();
-    ctx.arc(g.size / 2, g.size / 2, g.size / 2, 0, Math.PI * 2);
+    ctx.arc(W / 2, ctx.canvas.height / 2, W / 2, 0, Math.PI * 2);
     ctx.fillStyle = background;
     ctx.fill();
     ctx.restore();
@@ -134,8 +202,8 @@ export function paint(
       ctx.shadowBlur = g.cell * 0.55 * b;
     }
 
-    const px = x * g.cell + pad;
-    const py = y * g.cell + pad;
+    const px = o + x * g.cell + pad;
+    const py = o + y * g.cell + pad;
     if (rounded) {
       ctx.beginPath();
       ctx.roundRect(px, py, led, led, radius);
