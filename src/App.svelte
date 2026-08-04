@@ -1,11 +1,5 @@
 <script lang="ts">
-  import {
-    DEFAULT_DEVICE,
-    DEVICES,
-    deviceById,
-    type Device,
-    type DeviceId,
-  } from "./lib/devices";
+  import { DEFAULT_DEVICE, DEVICES, deviceById, type Device } from "./lib/devices";
   import { CHANNEL_PRESETS, DEFAULTS, convert, type DitherMode, type Params } from "./lib/pipeline";
   import {
     RANGES as R,
@@ -209,11 +203,6 @@
     }
   }
 
-  function pickDevice(id: DeviceId) {
-    device = deviceById(id);
-    flash(`${device.name} — ${device.size}×${device.size}, ${device.ledCount} LEDs`);
-  }
-
   /* Millésime lu à l'exécution, pas écrit en dur : un pied de page figé sur
      l'année de la dernière compilation vieillit tout seul. */
   const YEAR = new Date().getFullYear();
@@ -267,7 +256,7 @@
           label="Appareil"
           value={device.id}
           options={DEVICES.map((d) => ({ v: d.id, t: d.ref }))}
-          onchange={pickDevice}
+          onchange={(id) => (device = deviceById(id))}
         />
         <Seg
           label="Échelle de préview"
