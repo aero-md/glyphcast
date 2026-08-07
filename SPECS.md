@@ -80,12 +80,15 @@ de sa hauteur**.
 | Cadre | 704 × 913 | 704 × 913 |
 | Corps dans le cadre | 98,3 % | 98,3 % |
 | Hublot — diamètre inscrit | 26,49 % | 33,66 % |
-| Hublot — centre | 79,62 % / 15,38 % | 68,96 % / 23,00 % |
-| Cerne (`margin`) | 1,5 LED | 1,5 LED |
+| Hublot — centre | 79,69 % / 15,43 % | 68,96 % / 23,00 % |
+| Cerne (`margin`) | 0,75 LED | 1,5 LED |
 | Part de LED dans le pas (`duty`) | 0,72 | 13/16 |
-| Largeur de rendu (`frameWidth`) | 792 px | 739 px |
-| → cellule obtenue | 8 px | 16 px |
-| → LED / écart | 6 / 2 px | 13 / 3 px |
+| Largeur de rendu (`frameWidth`) | 500 px | 522 px |
+| → hublot obtenu | 132,45 px | 175,71 px |
+| → champ de LEDs | 125 px | 143 px |
+| → cellule obtenue | 5 px | 11 px |
+| → cerne obtenu | 3,73 px | 16,35 px |
+| → LED / écart | 4 / 1 px | 9 / 2 px |
 | Glyph Button — centre | 84,53 % / 74,82 % | — (il n'y en a pas) |
 
 #### Une largeur de rendu par appareil
@@ -97,14 +100,58 @@ deux matrices n'ont ni le même nombre de LEDs, ni le même pas, ni le même
 cerne — elles ne peuvent pas tomber juste à la même largeur, et le constater a
 coûté plusieurs allers-retours.
 
-Chaque valeur est choisie pour que la cellule tombe sur un entier confortable :
-792 px donne au (3) un hublot de 223,9, soit 28 cellules de 8 px ; 739 px donne
-au (4a) Pro un hublot de 256,1, soit 16 cellules de 16 px. Le plus étroit des
-deux dos se centre dans la colonne, qui fait la largeur du plus large.
+Chaque valeur est choisie pour que la cellule tombe sur un entier **et** que le
+cerne tombe sur la consigne : 500 px donne au (3) un hublot de 132,45 pour un
+champ de 125 (25 cellules de 5 px), soit 3,73 px de cerne ; 522 px donne au
+(4a) Pro un hublot de 175,71 pour un champ de 143 (13 cellules de 11 px), soit
+16,35 px. Les deux dos se centrent dans la colonne, qui les plafonne à 550 px.
+
+##### Le cerne du (3) a été divisé par deux, celui du (4a) Pro non
+
+Il a valu 1,5 LED sur les deux — 7,4 px sur le (3), 16,5 sur le (4a) Pro. Sur le
+(3), à la taille où la préview affiche le dos, ça ne se lit pas comme le cerne de
+l'appareil mais comme **une matrice trop petite pour son hublot**.
+
+La correction ne passe pas par la consigne seule : la cellule du (3) est déjà
+bloquée à 5 px par le plancher géométrique, donc les pixels de largeur en trop
+partaient intégralement dans le cerne. C'est la **largeur de rendu** qui bouge, et
+le cerne suit — 528 px → 7,43 devient 500 px → 3,72, cellule inchangée : le
+hublot se resserre autour de la matrice.
+
+**Le (4a) Pro a suivi, puis a été remis.** Il est passé par 513 px et 0,7 LED au
+nom de la cohérence entre les deux appareils. Mauvaise idée : c'est la cohérence
+avec **l'appareil** qui compte. Sa cote de 1,53 pas est *mesurée* sur le pas des
+LEDs de la photo d'origine, là où celle du (3) vient du verre entier — biseau
+compris — et surestime. Cet appareil porte réellement un cerne large, et le fin
+lui allait mal à l'œil. Retour à 522 px / 1,5 LED, soit 16,35 px.
+
+Que les deux consignes soient très différentes (0,75 contre 1,5) n'est donc pas
+une incohérence : elles ne sont pas mesurées sur la même chose.
+
+Les deux restent au-dessus du plancher géométrique (0,576 et 0,610, voir
+`cerneMin`) : aucun coin de LED ne sort du hublot. Vérifié stable en `dpr` 1, 2
+et 3.
 
 Le prix est assumé : **les deux dos ne sont plus affichés à la même taille**, on
 ne peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité de
-chacune qui a été retenue.
+chacune qui a été retenue. Depuis le passage de la colonne à 550 px les deux
+largeurs tombent à 1 % l'une de l'autre, mais c'est une coïncidence de
+quantification et non un invariant — ne rien bâtir dessus.
+
+#### Pourquoi la colonne plafonne à 550 px
+
+Elle a valu 792, la largeur du plus large des deux dos. Le cadre est en 704/913,
+donc un dos de 792 px fait **1027 px de haut** : sur un écran 1080, la mise en
+page en rognait le tiers bas et l'appareil paraissait affiché à la loupe. À 500
+et 513 px, les deux dos font 648 et 665 px de haut et tiennent entiers dans la
+hauteur laissée par l'en-tête et le pied — le rognage devient l'exception qu'il
+aurait toujours dû être.
+
+Ce que ça coûte : la cellule du (3) passe de 8 à 5 px, celle du (4a) Pro de 16 à
+12. Ce que ça rapporte : l'appareil entier à l'écran, sans zoom apparent, sur la
+résolution la plus courante. Le mode grand y perd aussi — son disque était
+plafonné par la hauteur, il l'est maintenant par les 550 px de colonne — mais il
+affiche un carré, l'impact y est moindre.
 
 **Les deux photos ont leur hublot noirci.** C'est une exigence sur l'asset, pas
 une option : la matrice de l'appareil doit avoir été remplie de noir dans
@@ -142,14 +189,27 @@ grille qui touche sa découpe — ce qu'aucun appareil ne fait. Il est exprimé 
 de taille, alors qu'en largeurs de LED il reste juste partout et le hublot vaut
 simplement `size + 2 × margin` cellules.
 
+**Il y en a deux, et les confondre coûte cher.** `device.margin` est la cote du
+hublot *sur la photo* : une contrainte, la matrice doit s'y inscrire. Le mode
+grand et l'export PNG, eux, **dessinent** leur disque — son bord n'existe que
+parce qu'on le trace, donc son cerne est purement esthétique et n'a aucune raison
+de suivre la photo. Il a sa propre constante, `CERNE_DESSINE = 1,5` dans
+`render.ts`. Les avoir partagés a fait rétrécir le cerne du mode grand et des PNG
+le jour où celui du mode téléphone a été divisé par deux.
+
 Sur le (3), le hublot mesuré est le **verre entier** (199 px, biseau compris) et
-non la seule zone de LEDs (~170 px). Le relevé en suggérait deux largeurs de
-LED, mais à l'écran deux cellules de cerne mangent la matrice — elle rend plus
-petit et moins net que l'appareil, pour un bord qui ne se lit pas mieux ; une
-seule était l'excès inverse, le cerne ne se lisait plus. Sur le (4a) Pro, le
-relevé de la photo d'origine donne un pas de 18,67 px dans un hublot de 300
-(source 2048²), donc un champ de 13 × 18,67 = 242,7 px et un cerne de
-(300 − 242,7)/2 = 28,6 px, soit **1,53 pas** — la consigne n'est pas estimée.
+non la seule zone de LEDs (~170 px). Le relevé en suggérait deux largeurs de LED.
+Sur le (4a) Pro, le relevé de la photo d'origine donne un pas de 18,67 px dans un
+hublot de 300 (source 2048²), donc un champ de 13 × 18,67 = 242,7 px et un cerne
+de (300 − 242,7)/2 = 28,6 px, soit **1,53 pas** — celle-là est mesurée, pas
+estimée.
+
+**Seul le (3) s'écarte du relevé** : 0,75 largeur de LED, soit la moitié. Son
+relevé porte sur le verre entier, biseau compris, ce qui surestime le cerne
+réel — et à la taille où la préview affiche le dos, le suivre donne une matrice
+qui paraît trop petite pour son hublot. Le (4a) Pro garde ses 1,5 : sa cote vient
+du pas des LEDs lui-même, elle est juste, et le fin lui allait mal à l'œil.
+Voir § 2.1.
 
 #### La part de LED dans le pas
 
@@ -187,8 +247,8 @@ corps égale — 35,62 % contre 26,49 %. La presse de lancement annonçait +57 %
 la photo dit autre chose, et c'est elle qui pilote le rendu.
 
 Le (4a) Pro **n'a pas de Glyph Button**. Son profil n'a donc pas de champ
-`button`, et la comparaison avant/après y bascule sur le bouton en barre du mode
-« grand » (§ 5.4). La capsule visible sous la matrice n'en est pas un.
+`button`, et la comparaison avant/après y bascule sur un bouton en barre sous la
+préview (§ 5.4). La capsule visible sous la matrice n'en est pas un.
 
 La hauteur de bande gardée en colonne unique se **dérive** du bas du disque
 (`previewBand`) au lieu d'être posée en dur : le (4a) Pro porte une matrice plus
@@ -388,6 +448,20 @@ Un sélecteur exclusif, `(3)` / `(4a) Pro`, posé **avant** les deux sélecteurs
 préview : c'est le seul des trois qui change ce qui sort de l'outil, les autres
 ne changent que ce qu'on en voit.
 
+Les trois tiennent sur **une seule ligne en colonne unique**. Sur un (3) —
+420 px de large, donc 381,6 utiles — ils réclamaient 435 px et passaient à la
+ligne : 46,5 px de hauteur volés à une bande de préview déjà plafonnée à 40 % de
+l'écran, pour une rangée qu'on ne touche qu'une fois par session. Trois leviers,
+dans cet ordre : les libellés (`Appareil`, `Échelle de préview`, `Rendu des LED`)
+sautent, la gouttière et le rembourrage se resserrent. Sans libellé les valeurs
+restent lisibles seules — chacune dit ce qu'elle règle — et le nom reste porté
+par l'`aria-label` du groupe : il n'est retiré qu'à l'œil.
+
+Le tout tombe à 331 px, ce qui passe sur un (3) comme sur un écran de 390 px.
+En dessous — un iPhone SE à 375 px déborde d'une poignée de pixels — la rangée
+**défile** horizontalement plutôt que de se casser en deux : une ligne qui
+déborde reste une ligne, et c'est la hauteur qu'on protège.
+
 La bascule est non destructive et immédiate. Ce qui **ne bouge pas** : l'image
 chargée, le cadrage, le mixeur, la tonalité, la sortie LED, l'échelle de préview,
 le style de LED, le thème. Ce qui **suit** : la grille et le masque, le compteur
@@ -514,10 +588,14 @@ par défaut. C'est ce que donnerait l'image sans aucun réglage tonal — pas
 l'image d'origine, qui n'aurait pas le même cadrage et ne serait donc pas
 comparable.
 
-Lequel des deux s'affiche dépend de ce qu'il y a à l'écran : le Glyph Button
-quand le profil en déclare un et qu'on est en mode téléphone, le bouton en barre
-sinon — mode grand, ou appareil sans Glyph Button comme le (4a) Pro. La fonction
-ne dépend donc d'aucun bouton physique ; seule sa mise en scène change.
+**La comparaison n'existe qu'en mode téléphone.** Le Glyph Button quand le profil
+en déclare un ; le bouton en barre sous la préview sinon, comme sur le (4a) Pro.
+La fonction ne dépend donc d'aucun bouton physique, mais elle dépend du mode.
+
+Rien en mode grand. Ce mode ne prétend pas émuler l'appareil — il sert à lire LED
+par LED ce que fait un réglage, pas à juger un rendu d'ensemble, et c'est sur le
+téléphone que l'A/B veut dire quelque chose. La barre n'y ajoutait qu'une ligne
+de chrome sous un disque déjà contraint en hauteur par la colonne.
 
 Le relâchement, la sortie du pointeur et l'annulation du geste par le
 navigateur reviennent tous au rendu courant. Au clavier, `Entrée` / `Espace`
@@ -565,9 +643,17 @@ beaucoup moins.
 
 Une colonne plus étroite que le `frameWidth` de l'appareil contraint la largeur,
 et la cellule suit alors le diamètre réellement affiché : une valeur figée
-donnerait une trame irrégulière. La bascule en colonne unique se fait à
-**1200 px** : en dessous, le plus large des deux dos (792 px), 25,6 de gouttière
-et les 300 px minimum du rack ne tiennent plus côte à côte, marges comprises.
+donnerait une trame irrégulière.
+
+**Le disque du mode grand ne doit pas dépasser le diamètre qu'on lui offre.** Il
+vaut `(size + 2 × margin) × cell` : arrondir la cellule vers le haut le fait
+dépasser d'au plus une cellule entière. Sans conséquence en mode téléphone, où
+rien n'est dessiné à ce diamètre — c'est même là que se gagne la cellule de 5 px
+du (3), dont l'idéal tombe à 4,995 — mais en mode grand le disque est une vraie
+boîte dans une colonne finie. À 550 px de colonne le (3) réclamait 560 px de
+disque : le `max-width` du CSS l'écrasait en ellipse et le canvas, resté
+positionné sur les 560, sortait du cadre d'un demi-cerne. `screenGrid` prend donc
+un drapeau `fit`, réservé au mode grand, qui interdit l'arrondi vers le haut.
 
 Un fondu de 56 px (28 px en colonne unique) marque le bord du rognage, et
 seulement quand il y a rognage. Les photos se terminent en outre par leur propre
@@ -660,9 +746,53 @@ La netteté dépendait donc de la parité, et apparaissait ou disparaissait au g
 des largeurs — sans rapport visible avec ce qu'on venait de changer. Changer la
 marge d'un appareil pouvait rendre l'autre flou.
 
-La position est donc calculée en pixels entiers **de l'écran** : on mesure
-l'origine de la boîte porteuse, on arrondit la position absolue, on repasse en
-coordonnées locales. Ça vaut pour les deux modes.
+##### On corrige le cadre, pas le canvas
+
+Première tentative : arrondir la position **absolue** du canvas — mesurer
+l'origine de la boîte porteuse, arrondir, repasser en coordonnées locales. Net,
+mais faux d'une autre manière. Le cadre, lui, reste où le flex l'a posé, c'est-à-
+dire souvent sur un demi-pixel (la page est en `margin: 0 auto`). Le canvas
+s'accrochait donc à la grille de l'écran pendant que la photo suivait la fenêtre :
+en redimensionnant d'un pixel, **le dos bougeait sans le canvas, puis l'inverse,
+et les deux se recollaient tous les 3-4 px**. L'écart atteignait un demi-pixel et
+changeait de signe selon la largeur.
+
+C'est plus grave que ça n'en a l'air : régler le calage à l'œil dans ces
+conditions revient à viser une cible mouvante. C'est comme ça que `disc.left` et
+`disc.top` du (3) ont fini 1,7 px trop à droite et trop bas, corrigés deux fois
+d'un pixel pour compenser une oscillation.
+
+La correction porte donc sur le **cadre** :
+
+1. une **ancre** nue occupe la place et sert de repère de mesure ;
+2. le cadre, à l'intérieur, reçoit une `transform: translate()` sous-pixel qui le
+   repose sur la grille de pixels physiques ;
+3. le canvas se positionne alors en coordonnées **purement locales**, arrondies
+   au pixel physique.
+
+`matrixX` et `matrixY` ne dépendent plus ni de la position à l'écran ni de la
+largeur de la fenêtre. Le canvas est net, et son écart à la photo est une
+constante du profil : mesuré à 336 px sur toute une plage de décalages
+fractionnaires, sans varier d'un millième.
+
+**La transformation porte sur un autre élément que celui qu'on mesure.** Une
+transformation entre dans `getBoundingClientRect`, donc l'appliquer à l'ancre
+ferait mesurer la position déjà corrigée : la correction retomberait à zéro et la
+valeur oscillerait d'une image à l'autre. D'où l'ancre nue et le cadre transformé
+à l'intérieur.
+
+##### L'arrondi se fait au pixel physique, pas au pixel CSS
+
+Sur un appareil dense, un pixel CSS vaut deux ou trois pixels physiques :
+arrondir au CSS jette cette précision et la matrice peut atterrir à un pixel et
+demi du centre du hublot. Invisible tant que le cerne faisait 7 px, franc une
+fois tombé à 3,7 — et **introuvable en émulation**, où le `dpr` vaut 1 et où les
+deux grilles se confondent. C'est exactement le profil d'un bug « seulement sur
+appareil réel ».
+
+Un canvas dont la boîte tombe sur des pixels physiques entiers est recopié 1:1,
+que sa position CSS soit ronde ou non : l'arrondi au pixel physique est donc
+aussi net, et strictement plus précis. Écart au centre obtenu, mesuré : 0,06 px.
 
 **Le choix de la cellule se fait sur le cerne, pas sur la taille.** La cellule
 étant entière, le cerne ne prend que des valeurs discrètes ; on retient donc,
@@ -717,9 +847,16 @@ la sienne. Le seul appareil qui en porte un l'a à droite du dos.
 
 ### 5.6 Lectures
 
-Sous la préview, en permanence : **LED allumées** `[nnn / ledCount]`, **moyenne**
-en pourcentage, **échelle** en pixels par LED. Ce sont des mesures de la trame
-courante, pas des estimations.
+Sous la préview, en deux colonnes : **LED allumées** `[nnn / ledCount]`,
+**moyenne** en pourcentage, **échelle** en pixels par LED. Ce sont des mesures de
+la trame courante, pas des estimations.
+
+**Masquées en colonne unique.** Elles décrivent la trame, elles ne servent pas à
+la régler — et elles y sont posées entre la matrice et le rack, pile là où se
+joue le va-et-vient de l'œil pendant qu'on manipule un curseur. Les ~30 px
+qu'elles occupaient (ligne + gouttière) reviennent au rack, qui passe sous une
+préview épinglée. Le compte de LED reste lisible au pied de page, et l'échelle en
+px/LED ne veut de toute façon pas dire grand-chose sur un écran de téléphone.
 
 ### 5.7 Mise en page et défilement
 
@@ -728,29 +865,83 @@ sans avoir à faire défiler quoi que ce soit. Régler un curseur sans voir son
 effet n'aurait aucun intérêt. Ce qui cède quand la place manque, c'est le bas
 de la préview — jamais son échelle, jamais sa présence à l'écran.
 
-**Deux colonnes** (au-dessus de 980 px). La page occupe exactement la fenêtre
-et **ne défile pas**. L'en-tête, la préview, les lectures et le pied restent en
-place ; le rack de réglages est le seul élément qui défile. Si la préview ne
-rentre pas dans la hauteur laissée par l'en-tête et le pied, son cadre la rogne
-par le bas.
+**Deux colonnes.** La page occupe exactement la fenêtre et **ne défile pas**.
+L'en-tête, la préview, les lectures et le pied restent en place ; le rack de
+réglages est le seul élément qui défile. Si la préview ne rentre pas dans la
+hauteur laissée par l'en-tête et le pied, son cadre la rogne par le bas.
 
-**Colonne unique** (980 px et moins). Défilement de page classique, un seul
-ascenseur. L'en-tête défile — collant il volerait 135 px à la préview — et
-c'est la **colonne de préview qui s'épingle en haut de l'écran**, réduite à la
-bande qui porte le disque, le rack passant dessous.
+**Colonne unique.** Défilement de page classique, un seul ascenseur. L'en-tête
+défile — collant il volerait 135 px à la préview — et c'est la **colonne de
+préview qui s'épingle en haut de l'écran**, réduite à la bande qui porte le
+disque, le rack passant dessous.
 
-Hauteur de la bande :
+#### Le seuil de bascule dépend de la forme de la fenêtre, pas que de sa largeur
 
-| Mode | Bande |
-|---|---|
-| Téléphone | `min(0,5 × largeur du téléphone, 0,4 × hauteur d'écran)` |
-| Grand | taille du disque, elle-même réduite à `min(largeur, 0,4 × hauteur d'écran)` |
+Deux conditions, en OU :
 
-Le facteur 0,5 vient de la géométrie : le bas du disque tombe à 0,329 de la
-largeur de l'appareil (centre à 15,36 % de la hauteur, rayon à 13,02 % de la
-largeur, cadre en 704/913). Il reste donc de la marge sous le disque, et le
-fondu ne mord pas sur les LEDs. Le plafond en hauteur d'écran évite qu'un
-appareil large sur un écran court ne laisse rien au rack.
+| Seuil | Condition | Pourquoi |
+|---|---|---|
+| `max-width: 960px` | plancher dur | 550 de préview + 25,6 de gouttière + les 300 px minimum du rack + 76,8 de marges font 952,4. En dessous la grille déborde au lieu de passer en colonne. |
+| `max-width: 1080px` **et** `max-aspect-ratio: 5/4` | confort | entre les deux la grille rentre, mais le rack passe sous ~430 px et ses libellés de curseur se cassent en deux lignes. On n'y bascule que si la fenêtre est carrée ou en portrait. |
+
+Le seuil a longtemps été une largeur seule, à 1200 px. C'était le mauvais
+critère : un portable large de 1024 ou 1280 px pour 640 à 800 de haut y était
+envoyé en colonne unique alors que les deux colonnes tenaient très bien, et le
+mode épinglé n'y apportait qu'une page défilante et une bande de préview
+plafonnée à 40 % de la hauteur.
+
+C'est bien la **hauteur** qui décide de l'intérêt de la colonne unique : sur un
+écran large et court, épingler une bande de 40 % ne laisse rien au rack. Le
+ratio 5/4 sépare proprement les deux familles — tout ce qui est plus large que
+1,25 est un écran paysage (portable en 16/10 ou 16/9, tablette en paysage,
+bureau), tout ce qui l'est moins est une tablette en portrait, un téléphone ou
+une fenêtre étroite sur un grand écran.
+
+Le script double la condition (`FLOOR` / `COMFY` / `LANDSCAPE` dans `Preview`) :
+les deux **doivent** basculer sur la même fenêtre, sinon la bande se plafonne
+sans que la mise en page ait changé.
+
+La page elle-même plafonne à **1120 px** — 550 + 25,6 + 467 de rack + 76,8 de
+marges. Le rack est la grandeur qu'on protège, donc rétrécir la préview de 242 px
+a rétréci la page d'autant et pas d'un pixel de plus.
+
+##### La bande ne dépend pas du mode
+
+```
+bande = min(previewBand(appareil) × largeur du dos, 0,4 × hauteur d'écran)
+```
+
+Une seule formule, **les deux modes s'y rangent**. Basculer d'échelle change la
+façon de regarder la matrice, pas la place que la préview occupe dans la page :
+quand la bande suivait le mode, le mode grand prenait 70 px de plus que le mode
+téléphone et tout le rack qui passe dessous sautait à chaque aller-retour, pour
+un réglage qui ne concerne que la préview.
+
+C'est le **mode téléphone** qui donne la référence, parce que c'est le seul des
+deux à avoir une géométrie à respecter — `previewBand` dérive du bas du disque
+sur la photo du dos, avec ce qu'il faut de marge pour que le fondu de rognage
+tombe sous les LEDs et non dessus (§ 2.1). Le mode grand n'a rien d'équivalent à
+faire valoir, il prendrait toute la place qu'on lui laisse : c'est donc lui qui
+s'aligne, et son disque se plafonne à la bande au lieu de la part d'écran brute.
+Il y perd — sur un (3) à 420 px, la matrice du mode grand passe de 225 à 150 px —
+et c'est le prix d'une colonne qui ne bouge plus.
+
+`previewBand` est **par appareil** et non une constante partagée : le (4a) Pro
+porte une matrice plus large et placée plus bas, une valeur commune l'aurait
+décapitée. Elle vaut 0,502 sur le (3) et 0,637 sur le (4a) Pro. Le plafond en
+hauteur d'écran évite qu'un appareil large sur un écran court ne laisse rien au
+rack.
+
+Le cadre prend la bande en **`height` et non en `max-height`** : il doit faire
+cette hauteur, pas « au plus » cette hauteur. Le disque du mode grand est un
+multiple entier de sa cellule, donc presque toujours un peu plus court que la
+bande — sur un `max-height` le cadre se serait recollé à lui et la colonne aurait
+encore sauté d'une quinzaine de pixels à la bascule. Le mou tombe sous le disque,
+où il ne se voit pas : fond transparent, cadre aligné en haut.
+
+**Reste une différence sur le (4a) Pro** : son bouton A/B en barre n'existe qu'en
+mode téléphone (§ 5.4), donc son conteneur y est 40 px plus haut. La bande, elle,
+est bien identique. Le (3), qui porte l'A/B sur son Glyph Button, n'a aucun écart.
 
 #### Défilement du rack
 

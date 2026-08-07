@@ -40,7 +40,7 @@
 
   /* Largeur de la colonne, pour que le mode « grand » occupe exactement la
      place du téléphone. */
-  let colW = $state(576);
+  let colW = $state(550);
 
   /* --- défilement du rack ---
      La page ne défile jamais : elle occupe la fenêtre, l'en-tête, la préview et
@@ -472,9 +472,11 @@
   .page {
     position: relative;
     z-index: 2;
-    /* élargie avec la préview : à 1180 px, le rack tombait sous 430 px de large
-       et ses libellés de curseur se cassaient en deux lignes */
-    max-width: 1360px;
+    /* Suit la colonne de préview : 550 + 25,6 de gouttière + 467 de rack +
+       76,8 de marges. Le rack est la grandeur qu'on protège — sous 430 px ses
+       libellés de curseur se cassent en deux lignes — donc rétrécir la préview
+       de 242 px rétrécit la page d'autant, et pas d'un pixel de plus. */
+    max-width: 1120px;
     margin: 0 auto;
     padding: 0 2.4rem;
     height: 100dvh;
@@ -525,10 +527,12 @@
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    /* 792 px : la largeur du plus large des deux dos. Chaque appareil porte la
-       sienne — voir frameWidth dans devices.ts — et le plus étroit se centre
-       dans la colonne. */
-    grid-template-columns: minmax(0, 792px) minmax(300px, 1fr);
+    /* 550 px. Ce n'est plus la largeur d'un dos mais un plafond posé sur la
+       colonne : au-delà, le téléphone dépassait la hauteur d'un écran 1080 et
+       s'y faisait rogner du tiers, pour un rendu qui paraissait affiché à la
+       loupe. Les deux appareils portent une largeur qui tient dessous — voir
+       frameWidth dans devices.ts — et se centrent dans la colonne. */
+    grid-template-columns: minmax(0, 550px) minmax(300px, 1fr);
     grid-template-rows: minmax(0, 1fr);
     gap: 1.6rem;
   }
@@ -776,10 +780,21 @@
      redevient défilante et c'est la préview, réduite à la bande qui porte le
      disque, qui s'épingle en haut de l'écran. Régler un curseur sans voir la
      matrice n'aurait aucun intérêt. */
-  /* 1200 px : en dessous, 792 px de téléphone + 25,6 de gouttière + les 300 px
-     minimum du rack ne tiennent plus, marges comprises. Voir NARROW dans
-     Preview, qui double ce seuil côté script. */
-  @media (max-width: 1200px) {
+  /* Deux seuils, dont un qui regarde la **forme** de la fenêtre et pas
+     seulement sa largeur :
+
+     - 960 px : plancher dur. En dessous, 550 de préview + 25,6 de gouttière +
+       les 300 px minimum du rack + 76,8 de marges ne tiennent plus (952,4).
+     - 1080 px **et fenêtre pas plus large que 5/4** : entre les deux, la grille
+       rentre mais le rack passe sous ~430 px. On n'y bascule que si la fenêtre
+       est carrée ou portrait. Un portable — 1024 ou 1280 de large pour 640 à
+       800 de haut — reste en deux colonnes : il y était envoyé en colonne
+       unique par l'ancien seuil de 1200 px alors que les deux colonnes tenaient
+       très bien, et le mode épinglé n'y apportait rien.
+
+     Voir FLOOR / COMFY / LANDSCAPE dans Preview, qui doublent ces seuils côté
+     script. */
+  @media (max-width: 960px), (max-width: 1080px) and (max-aspect-ratio: 5 / 4) {
     .page {
       height: auto;
       overflow: visible;
@@ -817,6 +832,52 @@
       scrollbar-gutter: auto;
       -webkit-mask-image: none;
       mask-image: none;
+    }
+
+    /* Les trois sélecteurs tiennent sur **une seule ligne**.
+       Sur un (3) — 420 px de large, donc 381,6 utiles — les trois groupes
+       réclamaient 435 px et passaient à la ligne : 46,5 px de hauteur volés à
+       une bande de préview déjà plafonnée à 40 % de l'écran, pour une rangée
+       qu'on ne touche qu'une fois par session.
+
+       Trois leviers, dans cet ordre : les libellés sautent, la gouttière et le
+       rembourrage se resserrent. Sans les libellés les valeurs restent
+       lisibles seules — « (3) / (4a) Pro », « Téléphone / Grand », « Sharp /
+       Soft » disent chacune ce qu'elles règlent. Le nom reste porté par
+       l'`aria-label` du groupe, il n'est retiré qu'à l'œil.
+
+       Le tout tombe à 331 px, ce qui passe sur un (3) comme sur un écran de
+       390 px. `overflow-x` est le filet en dessous — un iPhone SE à 375 px
+       déborde encore d'une poignée de pixels : la rangée y défile plutôt que
+       de se casser en deux, parce qu'une ligne qui déborde reste une ligne. */
+    .scale {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .scale::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Enfants d'un autre composant : le CSS scopé de Svelte ne les atteint pas
+       sans `:global`. Ils restent bornés à `.scale`, donc au seul endroit où la
+       contrainte existe — le rack garde ses sélecteurs pleine taille. */
+    .scale :global(.name) {
+      display: none;
+    }
+
+    .scale :global(.opts) {
+      flex-wrap: nowrap;
+    }
+
+    .scale :global(.opts button) {
+      padding: 0.34rem 0.4rem;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      white-space: nowrap;
     }
   }
 </style>

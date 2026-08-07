@@ -55,7 +55,27 @@ export type Grid = {
  */
 const cerneMin = (d: Device) => d.maxDist - d.size / 2 + Math.SQRT1_2;
 
-function cellFor(d: Device, discPx: number): number {
+/**
+ * Cerne du disque **dessiné**, en largeurs de LED : mode grand et export PNG.
+ *
+ * Découplé de `device.margin`, qui ne dit pas la même chose. Sur la photo du dos,
+ * le cerne est le hublot noirci : une contrainte, la matrice doit s'y inscrire, et
+ * `margin` y est volontairement plus fin que l'appareil pour que la matrice ne
+ * paraisse pas perdue dans son verre (voir devices.ts). Ici il n'y a pas de photo
+ * — le disque est peint, son bord n'existe que parce qu'on le dessine — donc le
+ * cerne est purement esthétique et n'a aucune raison de suivre la cote du hublot.
+ *
+ * Les avoir confondus a fait rétrécir le cerne du mode grand et des PNG le jour
+ * où celui du mode téléphone a été divisé par deux. Cette valeur est celle
+ * d'avant, restaurée.
+ */
+const CERNE_DESSINE = 1.5;
+
+/** Le cerne à viser : celui du profil sur la photo, le décoratif sinon. */
+const cerneVise = (d: Device, grand: boolean) => (grand ? CERNE_DESSINE : d.margin);
+
+function cellFor(d: Device, discPx: number, grand = false): number {
+  const margin = cerneVise(d, grand);
   // Le cerne vaut `(discPx / cell − size) / 2` : on choisit donc la cellule dont
   // le cerne tombe le plus près de la consigne, et non celle qui approche le
   // mieux la taille idéale. Ce n'est pas la même chose — la relation entre les
@@ -66,31 +86,51 @@ function cellFor(d: Device, discPx: number): number {
   // Plafond : la cellule doit laisser au moins le cerne minimal, ce qui borne du
   // même coup la grille à ce qui rentre dans le hublot.
   const tient = Math.max(1, Math.floor(discPx / (d.size + 2 * cerneMin(d))));
-  const ideal = discPx / (d.size + 2 * d.margin);
+  const ideal = discPx / (d.size + 2 * margin);
 
   const bas = Math.max(1, Math.min(Math.floor(ideal), tient));
-  const haut = Math.max(1, Math.min(Math.ceil(ideal), tient));
-  const ecart = (cell: number) => Math.abs(cerne(cell) - d.margin);
+  /* En mode grand, pas d'arrondi vers le haut. Le disque vaut
+     `(size + 2 × margin) × cell` : arrondir au-dessus de l'idéal le fait
+     **dépasser** le diamètre demandé, d'au plus une cellule entière.
+
+     Sans conséquence en mode téléphone, où le hublot est peint par la photo et
+     où rien n'est dessiné à ce diamètre — c'est même là que se gagne la
+     cellule de 5 px du (3), son idéal tombant à 4,995. Mais en mode grand le
+     disque est une vraie boîte dans une colonne de largeur finie : à 550 px de
+     colonne, le (3) réclamait 560 px de disque, que le `max-width` du CSS
+     écrasait en ellipse — le canvas, lui, restait positionné sur les 560 et
+     sortait du cadre d'un demi-cerne. */
+  const haut = grand ? bas : Math.max(1, Math.min(Math.ceil(ideal), tient));
+  const ecart = (cell: number) => Math.abs(cerne(cell) - margin);
   return ecart(haut) < ecart(bas) ? haut : bas;
 }
 
-function grid(d: Device, cell: number, dpr: number): Grid {
+function grid(d: Device, cell: number, dpr: number, grand: boolean): Grid {
   const size = d.size * cell;
-  const disc = (d.size + 2 * d.margin) * cell;
+  const disc = (d.size + 2 * cerneVise(d, grand)) * cell;
   return { cell, size, cssSize: size / dpr, disc, discCss: disc / dpr };
 }
 
 /**
  * Grille pour un affichage écran, tenant dans un disque de `discCss` px CSS.
- * Sur un Phone (3) rendu à 576 px de large, le disque fait 150 px (26,04 % du
- * cadre) pour 25 LEDs et deux cellules de cerne de chaque côté.
+ * Sur un Phone (3) rendu à 500 px de large, le hublot fait 132,45 px (26,49 % du
+ * cadre) pour un champ de 125 — 25 cellules de 5 px — et 3,73 px de cerne.
+ *
+ * `grand` change deux choses à la fois, parce que les deux découlent du même
+ * fait — le disque y est **dessiné** et non peint par la photo :
+ * - le cerne visé devient le décoratif (`CERNE_DESSINE`) et non la cote du
+ *   hublot ;
+ * - le disque obtenu ne dépasse jamais `discCss`, puisqu'il vit dans une boîte
+ *   de largeur finie. Le mode téléphone, lui, a besoin de l'arrondi vers le
+ *   haut (voir `cellFor`).
  */
 export function screenGrid(
   d: Device,
   discCss: number,
   dpr = window.devicePixelRatio || 1,
+  grand = false,
 ): Grid {
-  return grid(d, cellFor(d, discCss * dpr), dpr);
+  return grid(d, cellFor(d, discCss * dpr, grand), dpr, grand);
 }
 
 /**
@@ -98,9 +138,12 @@ export function screenGrid(
  * de pixels par LED : les deux appareils sortent des fichiers de même
  * encombrement, et c'est la finesse de la matrice qui fait la différence, pas la
  * taille du PNG.
+ *
+ * Le PNG dessine son propre disque : il prend donc le cerne décoratif, comme le
+ * mode grand, et non la cote du hublot de la photo.
  */
 export function exportGrid(d: Device, target = 600): Grid {
-  return grid(d, cellFor(d, target), 1);
+  return grid(d, cellFor(d, target, true), 1, true);
 }
 
 /**

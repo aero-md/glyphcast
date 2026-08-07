@@ -11,10 +11,10 @@
  * ce qui garde le calage quand la préview est redimensionnée.
  *
  * Les deux photos sont recadrées sur le même gabarit — 704 × 913, corps occupant
- * 98,3 % de la largeur du cadre. Ce n'est pas de la coquetterie : à 576 px de
- * large, les deux appareils sont alors montrés à la **même échelle de corps**,
- * et c'est la seule condition pour que comparer les deux matrices veuille dire
- * quelque chose.
+ * 98,3 % de la largeur du cadre. Ce n'est pas de la coquetterie : à largeur de
+ * cadre égale, les deux appareils sont alors montrés à la **même échelle de
+ * corps**, et c'est la seule condition pour que comparer les deux matrices
+ * veuille dire quelque chose.
  */
 
 import { buildGeometry, type Geometry } from "./matrix";
@@ -51,7 +51,9 @@ export type Device = Geometry & {
    *
    * Le prix est assumé : les deux dos ne sont plus affichés à la même taille, on
    * ne peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité
-   * de chacune qui a été retenue.
+   * de chacune qui a été retenue. Depuis le passage de la colonne à 550 px les
+   * deux valeurs tombent à 1 % l'une de l'autre — c'est une coïncidence de
+   * quantification, pas un invariant : ne rien bâtir dessus.
    */
   frameWidth: number;
   /**
@@ -98,9 +100,21 @@ const PHONE3: Device = {
   name: "Nothing Phone (3)",
   ref: "(3)",
   aspect: 704 / 913,
-  // 792 px → hublot inscrit de 209,8, où la cellule de 8 px est la plus grande
-  // qui laisse encore ses coins de LED à l'intérieur. La LED y fait 6 px.
-  frameWidth: 792,
+  // 500 px → hublot inscrit de 132,45 pour un champ de 125 (25 cellules de
+  // 5 px), soit 3,73 px de cerne de chaque côté. La LED y fait 4 px pour 1
+  // d'écart.
+  //
+  // Valait 792 px, ce qui donnait une cellule de 8 px mais un dos de 1027 px de
+  // haut : sur un écran 1080 la mise en page en rognait le tiers bas, et le
+  // téléphone paraissait affiché à la loupe. La cellule de 5 px est le prix payé
+  // pour que le dos tienne entier dans la hauteur.
+  //
+  // Puis 528, où le cerne tombait à 7,4 px : la cellule y était déjà bloquée à 5
+  // par le plancher géométrique, donc les 8 px de largeur en trop passaient
+  // intégralement dans le cerne. Le ramener à 500 rend l'écart au hublot deux
+  // fois plus fin **sans toucher à la cellule** — la matrice est identique, c'est
+  // le hublot qui se resserre autour d'elle.
+  frameWidth: 500,
   photo: { src: phone3Back, alt: "Dos d'un Nothing Phone (3)" },
   /* Meilleur **cercle inscrit** dans le hublot noirci : rayon 93,3 px centré en
      (560,5 ; 140,5) dans un cadre de 704 × 913.
@@ -109,13 +123,38 @@ const PHONE3: Device = {
      va de 93,3 à 100 px selon l'angle — et le relevé précédent, pris sur la
      boîte englobante, le surestimait donc de 6 %. La matrice était dimensionnée
      d'autant trop grand et ses coins sortaient du hublot dans les directions
-     étroites, à certaines largeurs d'écran seulement. */
-  disc: { left: 0.7962, top: 0.1538, pct: 0.2649 },
-  /* Une LED et demie. Le relevé du verre entier en suggérait deux, mais à
-     l'écran deux cellules de cerne mangent la matrice — elle rend plus petit et
-     moins net que l'appareil, pour un bord qui ne se lit pas mieux. Une seule
-     était l'excès inverse : le cerne ne se lisait plus. */
-  margin: 1.5,
+     étroites, à certaines largeurs d'écran seulement.
+
+     **Mesuré dans les pixels de la photo.** Le hublot noirci y occupe la boîte
+     x 461–660, y 41–239. Selon la définition qu'on prend du centre :
+
+       cercle inscrit    (561   ; 139,5)   rayon 92,5   ← `left` vient d'ici
+       boîte englobante  (560,5 ; 140,0)
+       centroïde         (561,4 ; 140,3)
+
+     `left` = 561/704. `top` = 140,9/913, soit **un pixel de rendu sous le centre
+     du cercle inscrit** — au-delà des trois relevés, mais dans leur sens : le
+     biseau du verre éclaircit le haut du hublot, donc le bord perçu tombe plus
+     bas que le bord du noir pur. Ce pixel-là est un ajustement visuel assumé,
+     pas une mesure, et c'est le seul.
+
+     Ne pas en ajouter d'autres au jugé sans vérifier contre la photo. Ça a été
+     fait une fois — deux nudges d'un pixel qui ont fini par poser la matrice
+     1,7 px trop à droite **et** trop bas — parce que la cible bougeait : tant
+     que le canvas s'arrondissait sur une origine écran fractionnaire, sa
+     position oscillait de ±0,5 px selon la largeur de la fenêtre. C'est réglé
+     côté Preview (le cadre est reposé sur la grille de pixels physiques), donc
+     ce qu'on voit ici est stable — un écart constaté est désormais réel. */
+  disc: { left: 0.79688, top: 0.15433, pct: 0.2649 },
+  /* Trois quarts de LED. Le relevé du verre entier en suggérait deux, et cette
+     consigne est passée par 1,5 avant d'atterrir ici — à l'écran, une cellule et
+     demie de cerne fait un bord noir de 7,4 px autour d'une matrice de 125, ce
+     qui se lit comme une matrice trop petite pour son hublot plutôt que comme le
+     cerne de l'appareil. La moitié suffit à le poser.
+
+     Reste au-dessus du plancher géométrique (0,576 ici, voir `cerneMin`) : aucun
+     coin de LED ne sort du hublot. */
+  margin: 0.75,
   // pas mesurable sur la photo, le hublot n'y montre aucune LED. Estimé un cran
   // plus serré que les deux tiers d'avant, qui creusaient trop les écarts.
   duty: 0.72,
@@ -140,17 +179,33 @@ const PHONE4A_PRO: Device = {
   name: "Nothing Phone (4a) Pro",
   ref: "(4a) Pro",
   aspect: 704 / 913,
-  // 739 px → hublot inscrit de 248,7, soit une cellule de 16 px. La LED y fait
-  // 13 px de côté pour 3 d'écart.
-  frameWidth: 739,
+  // 522 px → hublot inscrit de 175,71 pour un champ de 143 (13 cellules de
+  // 11 px), soit 16,35 px de cerne de chaque côté. La LED y fait 9 px pour 2
+  // d'écart.
+  //
+  // Valait 739 px (cellule de 16), ramené une première fois parce que le dos ne
+  // tenait pas en hauteur sur un écran 1080. Puis 513, le temps d'un essai à
+  // cerne fin — voir `margin` : cet appareil le porte large, contrairement au
+  // (3), et le resserrer lui allait mal.
+  frameWidth: 522,
   photo: { src: phone4aProBack, alt: "Dos d'un Nothing Phone (4a) Pro" },
   // meilleur cercle inscrit dans le hublot noirci : rayon 118,5 px centré en
   // (485,5 ; 210). Inscrit et non englobant, pour la même raison que le (3).
   disc: { left: 0.6896, top: 0.23, pct: 0.3366 },
-  /* Relevé sur la photo d'origine, avant noircissement : pas de 18,67 px dans
-     un hublot de 300 (source 2048²). Le champ de LEDs fait donc
-     13 × 18,67 = 242,7 px, et le cerne (300 − 242,7)/2 = 28,6 px, soit 1,53
-     pas — la consigne ci-dessous n'est pas estimée, elle est mesurée. */
+  /* **Mesurée, et gardée telle quelle.** Le relevé sur la photo d'origine, avant
+     noircissement, donne un pas de 18,67 px dans un hublot de 300 (source
+     2048²) : le champ de LEDs fait 13 × 18,67 = 242,7 px et le cerne
+     (300 − 242,7)/2 = 28,6 px, soit 1,53 pas.
+
+     Essayée à 0,7 — la moitié — en même temps que celle du (3), au nom de la
+     cohérence entre les deux appareils. Mauvaise idée : c'est la cohérence avec
+     **l'appareil** qui compte, et le (4a) Pro porte réellement un cerne large là
+     où celui du (3) était surestimé. À l'œil, le fin lui allait mal.
+
+     Les deux appareils ont donc des consignes très différentes, et c'est normal :
+     le (3) est à 0,75 parce que son relevé se fait sur le verre entier, biseau
+     compris, ce qui surestime ; celui-ci est à 1,5 parce que sa cote vient du
+     pas des LEDs lui-même. */
   margin: 1.5,
   /* La même mesure donnait une LED de 17 px sur ces 18,67, soit 0,911. C'est
      surestimé : une LED allumée déborde sur la photo, et le seuil de détection

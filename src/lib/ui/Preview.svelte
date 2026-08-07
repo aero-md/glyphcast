@@ -26,12 +26,30 @@
        un écran court ne laisserait rien au rack.
      - NARROW double le point de rupture du CSS. */
   const SHARE = 0.4;
-  /* Point de rupture des deux colonnes. Il n'est pas rond : c'est la largeur en
-     dessous de laquelle le plus large des deux dos (792 px), 25,6 px de
-     gouttière et les 300 px minimum du rack ne tiennent plus dans la page,
-     marges comprises. Le laisser sous cette valeur fait déborder la grille au
-     lieu de passer en colonne. */
-  const NARROW = 1200;
+  /* Point de rupture des deux colonnes — **deux seuils, pas un**, et le second
+     regarde la forme de la fenêtre.
+
+     - FLOOR : la largeur en dessous de laquelle la grille ne rentre plus, point.
+       550 px de colonne de préview, 25,6 de gouttière, les 300 px minimum du
+       rack et 76,8 de marges font 952,4. En dessous, la grille déborde au lieu
+       de passer en colonne. Arrondi à 960.
+     - COMFY / LANDSCAPE : entre FLOOR et COMFY la grille rentre mais le rack
+       descend sous ~430 px et ses libellés de curseur se cassent en deux
+       lignes. On n'y bascule en colonne unique que si la fenêtre est **carrée
+       ou plus haute que large** (ratio ≤ 5/4) — fenêtre étroite sur un bureau,
+       tablette en portrait. Un portable reste en deux colonnes : il est large
+       de 1024 ou 1280 px pour 640 à 800 de haut, la colonne unique y épinglait
+       une bande de préview et rendait la page défilante alors que les deux
+       colonnes tenaient parfaitement.
+
+     Le ratio est le bon critère parce que c'est la hauteur qui décide de
+     l'intérêt de la colonne unique, pas la largeur : sur un écran large et
+     court, épingler une bande de 40 % ne laisse rien au rack.
+
+     Le CSS des deux fichiers double ces seuils — voir les media queries. */
+  const FLOOR = 960;
+  const COMFY = 1080;
+  const LANDSCAPE = 5 / 4;
 
   type Props = {
     frame: Frame;
@@ -43,7 +61,7 @@
     width?: number;
   };
 
-  let { frame, mode = "phone", style = "sharp", compare = null, width = 576 }: Props = $props();
+  let { frame, mode = "phone", style = "sharp", compare = null, width = 550 }: Props = $props();
 
   let cvs = $state<HTMLCanvasElement>();
   let phoneEl = $state<HTMLElement>();
@@ -85,8 +103,25 @@
     `left:${c.left * 100}%;top:${c.top * 100}%;width:${c.pct * 100}%`;
 
   const size = $derived(Math.min(dev.frameWidth, width));
-  const narrow = $derived(vw <= NARROW);
+  const narrow = $derived(vw <= FLOOR || (vw <= COMFY && vw / vh <= LANDSCAPE));
   const cap = $derived(Math.floor(vh * SHARE));
+
+  /* Hauteur de bande gardée en colonne unique. Nulle part ailleurs : le CSS ne
+     s'en sert que sous le point de rupture.
+
+     **Elle ne dépend pas du mode.** Basculer d'échelle change la façon de
+     regarder la matrice, pas la place que la préview occupe dans la page :
+     quand la bande suivait le mode, le rack qui passe dessous sautait de
+     70 px à chaque aller-retour, et la page entière se réorganisait sous le
+     doigt pour un réglage qui ne concerne que la préview.
+
+     C'est le **mode téléphone** qui donne la référence, parce que c'est le seul
+     des deux qui ait une géométrie à respecter : la bande se dérive du bas du
+     disque sur la photo du dos (`previewBand`), avec ce qu'il faut de marge pour
+     que le fondu de rognage tombe sous les LEDs et non dessus. Le mode grand n'a
+     rien d'équivalent à faire valoir — il prendrait toute la place qu'on lui
+     laisse — donc c'est lui qui s'aligne. */
+  const band = $derived(Math.min(Math.round(size * previewBand(dev)), cap));
 
   /* Le disque seul **doit tenir en entier**, quitte à réduire : le rogner ferait
      perdre des LEDs, et une matrice amputée ne dit plus ce qu'elle contient.
@@ -97,25 +132,29 @@
      converge en une passe : le disque redescend à cette hauteur, le cadre n'a
      alors plus besoin de comprimer, et les deux se stabilisent.
 
+     En colonne unique le plafond est la **bande**, pas la part d'écran brute :
+     c'est ce qui aligne le mode grand sur le mode téléphone.
+
      La perte de netteté que ça coûte est acceptée ici — les cellules du mode
      grand sont trois à six fois plus grosses que sur le téléphone, un pixel
      d'arrondi s'y voit beaucoup moins. */
   const discSize = $derived(
-    Math.min(width, narrow ? cap : Infinity, stageH > 0 ? stageH : Infinity),
-  );
-
-  /* Hauteur gardée en colonne unique. Nulle ailleurs : le CSS ne s'en sert que
-     sous le point de rupture. */
-  const band = $derived(
-    mode === "phone" ? Math.min(Math.round(size * previewBand(dev)), cap) : discSize,
+    Math.min(width, narrow ? band : Infinity, stageH > 0 ? stageH : Infinity),
   );
 
   /* Les deux modes ne diffèrent que par le diamètre offert au disque : celui
      relevé sur la photo, ou toute la place de la colonne. La grille et le cerne
      s'en déduisent — la cellule suit le diamètre réellement affiché et jamais une
-     valeur figée, sinon la trame devient irrégulière sur colonne étroite. */
+     valeur figée, sinon la trame devient irrégulière sur colonne étroite.
+
+     Le mode grand demande en plus un disque qui **ne dépasse pas** le diamètre
+     offert : là, contrairement au téléphone, il est réellement dessiné et vit
+     dans une colonne de largeur finie. Le mode téléphone, lui, a besoin de
+     l'arrondi vers le haut — c'est ce qui lui donne sa cellule. */
   const grid = $derived<Grid>(
-    screenGrid(dev, mode === "phone" ? size * dev.disc.pct : discSize, dpr),
+    mode === "phone"
+      ? screenGrid(dev, size * dev.disc.pct, dpr)
+      : screenGrid(dev, discSize, dpr, true),
   );
 
   /* Si la préview ne rentre pas en hauteur, le cadre la rogne **par le bas**
@@ -133,10 +172,9 @@
      l'un le porte à gauche, ça se règle ici. */
   const hintX = $derived(dev.button ? dev.button.left - dev.button.pct / 2 - 0.02 : 0);
 
-  /* Position à l'écran de la boîte qui porte le canvas — le dos en mode
-     téléphone, le disque en mode grand. Relue à chaque changement de taille ou
-     de mode : sans elle, impossible de savoir si le canvas tombe sur un pixel
-     entier. */
+  /* Position à l'écran de **l'ancre** — la boîte qui porte le cadre, et qui ne
+     porte jamais la correction sous-pixel. Relue à chaque changement de taille
+     ou de mode. */
   $effect(() => {
     void size;
     void mode;
@@ -150,35 +188,70 @@
   });
 
   /**
-   * Cale une coordonnée du canvas sur la grille de pixels de **l'écran**, pas
-   * sur celle de son parent.
+   * Décalage sous-pixel qui repose une coordonnée sur la grille de pixels
+   * **physiques** de l'écran.
    *
-   * Un canvas posé à un demi-pixel est rééchantillonné par le navigateur, et
-   * tout le rendu devient flou d'un coup — alors que son contenu, lui, est
-   * parfaitement net. Le piège est vicieux : la netteté dépendait de la parité
-   * de la taille du canvas et du centrage du téléphone, donc elle apparaissait
-   * et disparaissait au gré des largeurs, sans rapport visible avec ce qu'on
-   * venait de changer.
+   * La page est centrée en `margin: 0 auto` et le cadre l'est en flex dans sa
+   * colonne : dès que la fenêtre a la mauvaise parité, le cadre se pose sur un
+   * demi-pixel. Le canvas, lui, doit tomber sur des pixels entiers — un canvas
+   * rééchantillonné devient flou d'un coup alors que son contenu est net.
    *
-   * On arrondit donc la position **écran** et on repasse en coordonnées locales.
+   * Le code corrigeait ça **côté canvas**, en arrondissant sa position écran et
+   * en repassant en coordonnées locales. Net, mais au prix d'un décalage de
+   * jusqu'à un demi-pixel entre le canvas et la photo, **variable avec la
+   * largeur de la fenêtre** : en redimensionnant d'un pixel, le dos bougeait
+   * sans le canvas, puis l'inverse, et les deux se recollaient tous les 3-4 px.
+   * Régler le calage à l'œil dans ces conditions revient à viser une cible
+   * mouvante — c'est comme ça que `disc` a fini 1,7 px trop à droite.
+   *
+   * On corrige donc **côté cadre** : l'ancre est mesurée, le cadre reçoit le
+   * décalage qui le repose sur la grille, et le canvas se positionne alors en
+   * coordonnées purement locales (`gridSnap`). Le canvas est net, il ne bouge
+   * plus jamais par rapport à la photo, et le calage devient une constante du
+   * profil au lieu d'une fonction de la fenêtre.
+   *
+   * **La correction porte sur un autre élément que celui qu'on mesure.** Une
+   * transformation entre dans `getBoundingClientRect`, donc l'appliquer à
+   * l'ancre ferait mesurer la position déjà corrigée, la correction retomberait
+   * à zéro et la valeur oscillerait d'une image à l'autre. D'où l'ancre nue et
+   * le cadre transformé à l'intérieur.
    */
-  const snap = (local: number, origine: number) => Math.round(local + origine) - origine;
+  const sousPixel = (v: number) => (Math.round(v * dpr) - v * dpr) / dpr;
+  const subX = $derived(sousPixel(phoneX));
+  const subY = $derived(sousPixel(phoneY));
+
+  /**
+   * Arrondit une coordonnée **locale** au pixel physique. Le cadre étant sur la
+   * grille, une position locale sur la grille l'est aussi à l'écran.
+   *
+   * Le `dpr` compte : arrondir au pixel CSS jette la précision d'un écran dense.
+   * Sur un appareil à dpr 3, un pixel CSS vaut trois pixels physiques, et la
+   * matrice pouvait atterrir à un pixel et demi du centre du hublot — invisible
+   * tant que le cerne faisait 7 px, franc une fois tombé à 3,7, et introuvable
+   * en émulation où le dpr vaut 1 et où les deux grilles se confondent.
+   */
+  const gridSnap = (local: number) => Math.round(local * dpr) / dpr;
 
   const frameH = $derived(size / dev.aspect);
   /* En mode téléphone le canvas se cale sur le hublot de la photo ; en mode
      grand il se centre dans le disque dessiné. Dans les deux cas la position
-     finale est un entier écran — le mode grand pardonne un peu plus, ses
-     cellules étant deux à trois fois plus grosses, mais un demi-pixel s'y voit
-     quand même. */
+     est **purement locale** : le cadre étant reposé sur la grille physique par
+     `subX`/`subY`, une coordonnée locale sur la grille l'est aussi à l'écran.
+     Ni `phoneX` ni la largeur de la fenêtre n'entrent plus dans le calcul — le
+     canvas ne peut donc plus se décaler de la photo. */
   const matrixX = $derived(
-    mode === "phone"
-      ? snap(dev.disc.left * size - grid.cssSize / 2, phoneX)
-      : snap((grid.discCss - grid.cssSize) / 2, phoneX),
+    gridSnap(
+      mode === "phone"
+        ? dev.disc.left * size - grid.cssSize / 2
+        : (grid.discCss - grid.cssSize) / 2,
+    ),
   );
   const matrixY = $derived(
-    mode === "phone"
-      ? snap(dev.disc.top * frameH - grid.cssSize / 2, phoneY)
-      : snap((grid.discCss - grid.cssSize) / 2, phoneY),
+    gridSnap(
+      mode === "phone"
+        ? dev.disc.top * frameH - grid.cssSize / 2
+        : (grid.discCss - grid.cssSize) / 2,
+    ),
   );
 
   $effect(() => {
@@ -212,11 +285,15 @@
 <figure class="device">
   <div class="stage" class:clipped style="--band:{band}px" bind:clientHeight={stageH}>
     {#if mode === "phone"}
+      <!-- Ancre nue : c'est elle qu'on mesure, elle ne porte jamais la
+           correction sous-pixel. Le cadre transformé est à l'intérieur — voir
+           `sousPixel`, mesurer l'élément transformé annulerait la correction. -->
       <div
         bind:this={phoneEl}
-        class="phone"
+        class="anchor"
         style="width:{size}px;aspect-ratio:{dev.aspect}"
       >
+      <div class="phone" style="transform:translate({subX}px,{subY}px)">
         <img src={dev.photo.src} alt={dev.photo.alt} draggable="false" />
 
         <!-- Le hublot de la photo est noirci : il n'y a rien à masquer, donc
@@ -252,27 +329,39 @@
           {/if}
         {/if}
       </div>
+      </div>
     {:else}
       <!-- le disque, cerne compris : le canvas ne porte que les LEDs, et il y
-           est posé en pixels entiers comme sur le dos -->
+           est posé en pixels entiers comme sur le dos. Même ancre qu'au mode
+           téléphone, pour la même raison. -->
       <div
         bind:this={phoneEl}
-        class="disc big"
-        style="width:{grid.discCss}px;height:{grid.discCss}px;background:{DISC_BG[style]}"
+        class="anchor big"
+        style="width:{grid.discCss}px;height:{grid.discCss}px"
       >
-        <canvas
-          bind:this={cvs}
-          class="matrix"
-          style="left:{matrixX}px;top:{matrixY}px;width:{grid.cssSize}px;height:{grid.cssSize}px"
-        ></canvas>
+        <div
+          class="disc big"
+          style="transform:translate({subX}px,{subY}px);background:{DISC_BG[style]}"
+        >
+          <canvas
+            bind:this={cvs}
+            class="matrix"
+            style="left:{matrixX}px;top:{matrixY}px;width:{grid.cssSize}px;height:{grid.cssSize}px"
+          ></canvas>
+        </div>
       </div>
     {/if}
   </div>
 
-  <!-- L'A/B en barre : quand il n'y a pas de téléphone à l'écran, et quand
-       l'appareil affiché n'a pas de Glyph Button sur lequel le poser. La
-       fonction ne dépend donc d'aucun bouton physique. -->
-  {#if mode === "large" || !dev.button}
+  <!-- L'A/B en barre : uniquement pour un appareil qui n'a pas de Glyph Button
+       sur lequel poser la fonction, et uniquement en mode téléphone.
+
+       Pas en mode grand. Ce mode ne prétend pas émuler l'appareil, il sert à
+       lire LED par LED ce que fait un réglage — la comparaison avec le rendu
+       brut se fait sur le téléphone, où elle veut dire quelque chose. La barre
+       n'y ajoutait qu'une ligne de chrome sous un disque déjà contraint en
+       hauteur. -->
+  {#if mode === "phone" && !dev.button}
     <button class="ab" class:is-held={held} disabled={!compare} {...holdHandlers}>
       {held ? "Rendu brut" : "Maintenir : avant / après"}
     </button>
@@ -323,9 +412,22 @@
     mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent 100%);
   }
 
-  /* largeur et proportions posées en ligne : la taille de cellule s'en déduit */
-  .phone {
+  /* Ancre : largeur et proportions posées en ligne, la taille de cellule s'en
+     déduit. Elle occupe la place et sert de repère de mesure ; c'est son enfant
+     qui reçoit le décalage sous-pixel. Une transformation ne change pas la mise
+     en page, donc l'ancre reste là où le flex l'a posée. */
+  .anchor {
     position: relative;
+    flex: none;
+  }
+
+  .anchor.big {
+    max-width: 100%;
+  }
+
+  .phone {
+    position: absolute;
+    inset: 0;
   }
 
   /* La photo n'a pas de bord franc : elle se termine en fondu, sinon la bande
@@ -369,8 +471,10 @@
     border-radius: 50%;
   }
 
+  /* remplit son ancre : c'est elle qui porte les dimensions */
   .disc.big {
-    max-width: 100%;
+    position: absolute;
+    inset: 0;
     box-shadow: 0 0 0 1px var(--line-strong);
   }
 
@@ -491,11 +595,35 @@
 
   /* Bande calculée dans le script — voir previewBand / SHARE. Le fondu y est
      plus court : sur une colonne de téléphone, 56 px mordraient sur le bas du
-     disque. */
-  @media (max-width: 1200px) {
+     disque.
+
+     Condition identique à FLOOR / COMFY / LANDSCAPE côté script — les deux
+     doivent basculer sur la même fenêtre, sinon la bande se plafonne sans que
+     la mise en page ait changé. */
+  @media (max-width: 960px), (max-width: 1080px) and (max-aspect-ratio: 5 / 4) {
+    /* `height` et non `max-height` : la bande doit faire cette hauteur, pas
+       « au plus » cette hauteur. Le disque du mode grand est un multiple entier
+       de sa cellule, donc presque toujours un peu plus court que la bande — sur
+       un `max-height` le cadre se serait recollé à lui et la colonne aurait
+       encore sauté d'une quinzaine de pixels à la bascule, ce qu'on cherche
+       précisément à supprimer. Le mou tombe sous le disque, où il ne se voit
+       pas : le fond est transparent et le cadre aligné en haut. */
     .stage {
       --fade: 28px;
-      max-height: var(--band);
+      height: var(--band);
+    }
+
+    /* Les lectures sautent. Elles décrivent la trame, elles ne servent pas à la
+       régler — et en colonne unique elles sont posées entre la matrice et le
+       rack, c'est-à-dire pile là où se joue le va-et-vient de l'œil pendant
+       qu'on manipule un curseur. Les 30 px qu'elles occupaient (ligne + gouttière)
+       reviennent à la bande de préview, qui est plafonnée à 40 % de la hauteur
+       d'écran et n'a rien de trop.
+
+       Le compte de LED reste lisible au pied de page, et l'échelle en px/LED ne
+       veut de toute façon pas dire grand-chose sur un écran de téléphone. */
+    figcaption {
+      display: none;
     }
   }
 </style>

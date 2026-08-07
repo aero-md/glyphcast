@@ -42,7 +42,7 @@ Le détail fonctionnel — formules, bornes, invariants, schéma JSON — est da
   luminosité, dithering Floyd-Steinberg ou Bayer 4 × 4 avec dosage.
 - **Comparer avant / après** en maintenant le Glyph Button — ou le bouton en
   barre sous la préview quand l'appareil n'en a pas, comme le (4a) Pro : même
-  cadrage, tonalité au repos.
+  cadrage, tonalité au repos. En échelle téléphone seulement.
 - **Prévisualiser** à deux échelles (sur le dos du téléphone, ou disque plein
   cadre) et dans deux styles de LED (`sharp` / `soft`).
 - **Exporter** en PNG, en `IntArray` Kotlin prêt à coller dans un Glyph Toy,
@@ -54,6 +54,12 @@ la page ne défile pas du tout — en-tête, préview et pied restent en place, 
 le rack de réglages défile. Sur une colonne c'est la préview qui s'épingle en
 haut de l'écran, réduite à la bande qui porte le disque, et le rack passe
 dessous.
+
+La bascule ne se joue pas sur la seule largeur mais sur la **forme** de la
+fenêtre : deux colonnes dès 960 px si elle est en paysage, 1080 px si elle est
+carrée ou en portrait. Un portable large de 1024 px et haut de 640 tient
+parfaitement les deux colonnes ; l'y envoyer en mode épinglé ne lui apportait
+qu'une page défilante.
 
 Ce qu'il ne fait pas : pas d'animation ni de séquence, pas d'envoi direct à
 l'appareil (aucune API navigateur ne le permet — la passerelle est l'export
@@ -174,18 +180,28 @@ Deux échelles, au choix :
 - **Téléphone** — la matrice calée sur le hublot de la photo du dos, cerne
   compris. Maintenir le Glyph Button compare avec le même cadrage et la tonalité
   au repos.
-- **Grand** — le hublot seul, **entier**, réduit s'il le faut pour tenir en
-  hauteur. Une matrice amputée ne dit plus ce qu'elle contient.
+- **Grand** — le hublot seul, **entier**, réduit s'il le faut pour tenir dans la
+  colonne. Une matrice amputée ne dit plus ce qu'elle contient. Pas d'A/B ici :
+  ce mode sert à lire LED par LED ce que fait un réglage, pas à juger un rendu
+  d'ensemble.
 
-**Chaque appareil a sa propre largeur de rendu** : 792 px pour le (3), 739 pour
-le (4a) Pro. Ce n'est pas un encombrement, c'est une taille de LED — à ces
-largeurs les hublots font 224 et 256 px, soit exactement 28 cellules de 8 px et
-16 cellules de 16 px. Une largeur commune ne peut pas convenir aux deux : la
-cellule est entière, et régler le cerne de l'un déplaçait celle de l'autre.
+**Chaque appareil a sa propre largeur de rendu** : 500 px pour le (3), 522 pour
+le (4a) Pro. Ce n'est pas un encombrement, c'est une taille de LED et un cerne —
+à ces largeurs les hublots font 132,45 et 175,71 px pour des champs de LEDs de
+125 et 143, soit 3,7 et 16,4 px de bord noir. Une largeur commune ne peut pas
+convenir aux deux : la cellule est entière, et régler le cerne de l'un déplaçait
+celle de l'autre.
 
-Le prix est assumé : les deux dos ne sont plus affichés à la même taille, on ne
-peut donc plus comparer les deux matrices à l'échelle. C'est la lisibilité de
-chacune qui a été retenue.
+Les deux cernes n'ont rien à voir, et c'est voulu : ils ne sont pas mesurés sur
+la même chose. Celui du (4a) Pro vient du pas de ses LEDs, il est juste. Celui du
+(3) vient du verre entier, biseau compris, ce qui surestime — le suivre donnait
+une matrice qui paraît trop petite pour son hublot, il est donc volontairement
+réduit de moitié.
+
+La colonne qui les porte plafonne à **550 px**. Au-delà le dos dépassait la
+hauteur d'un écran 1080 — 1027 px de haut à l'ancienne largeur de 792 — et s'y
+faisait rogner du tiers bas, pour un rendu qui paraissait affiché à la loupe.
+La cellule plus petite est le prix payé pour que l'appareil tienne entier.
 
 Le dos n'est jamais réduit pour tenir dans la fenêtre. Quand la place manque il
 est rogné par le bas : le hublot est en haut de l'appareil, ce qu'on perd c'est
